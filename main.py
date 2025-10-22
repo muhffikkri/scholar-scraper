@@ -1,10 +1,16 @@
 """
 Main entry point untuk aplikasi Google Scholar Scraper.
-Script ini mengorkestrasikan alur kerja lengkap dari membaca input hingga menyimpan hasil.
+Mendukung mode CLI dan GUI.
+
+Usage:
+    python main.py              # Mode CLI (default)
+    python main.py --gui        # Mode GUI
+    python main.py --cli        # Mode CLI (explicit)
 """
 
 import os
 import sys
+import argparse
 from datetime import datetime
 
 # Tambahkan path src ke sys.path
@@ -21,27 +27,18 @@ from core_logic.utils import clean_dosen_name
 from core_logic.scraper import GoogleScholarScraper
 
 
-# ==================== KONFIGURASI ====================
-# Ubah path ini sesuai dengan lokasi file input Anda
-INPUT_FILE_PATH = "input/daftar_dosen.csv"  # atau .txt
-
-# Konfigurasi output
+# ==================== KONFIGURASI CLI ====================
+INPUT_FILE_PATH = "input/daftar_dosen.csv"
 OUTPUT_DIR = "output"
-OUTPUT_PREFIX = "publikasi_dosen"
-
-# Konfigurasi scraper
-HEADLESS_MODE = False  # Set True untuk menjalankan browser tanpa GUI
-WAIT_TIME = 10  # Waktu tunggu maksimal dalam detik
-
-# ======================================================
+HEADLESS_MODE = False
+WAIT_TIME = 10
+# ========================================================
 
 
-def main():
-    """
-    Fungsi utama yang mengorkestrasikan seluruh proses scraping.
-    """
+def run_cli():
+    """Menjalankan aplikasi dalam mode CLI."""
     print("=" * 70)
-    print("GOOGLE SCHOLAR SCRAPER - APLIKASI SCRAPING PUBLIKASI DOSEN")
+    print("GOOGLE SCHOLAR SCRAPER - MODE CLI")
     print("=" * 70)
     print()
     
@@ -53,7 +50,7 @@ def main():
         return
     
     # Step 2: Baca nama dosen dari file
-    print(f"[2/6] Membaca daftar nama dosen dari file...")
+    print(f"[2/6] Membaca daftar nama dosen...")
     try:
         dosen_names_raw = read_dosen_from_file(INPUT_FILE_PATH)
         print(f"      Berhasil membaca {len(dosen_names_raw)} nama dosen")
@@ -62,24 +59,23 @@ def main():
         return
     
     if not dosen_names_raw:
-        print("ERROR: Tidak ada nama dosen yang ditemukan dalam file")
+        print("ERROR: Tidak ada nama dosen dalam file")
         return
     
-    # Step 3: Bersihkan nama dosen dari gelar
-    print(f"[3/6] Membersihkan nama dosen dari gelar akademis...")
+    # Step 3: Bersihkan nama
+    print(f"[3/6] Membersihkan nama dari gelar akademis...")
     dosen_names_clean = [clean_dosen_name(name) for name in dosen_names_raw]
     
-    # Tampilkan preview
-    print("      Preview nama yang dibersihkan:")
-    for i, (raw, clean) in enumerate(zip(dosen_names_raw[:5], dosen_names_clean[:5]), 1):
+    print("      Preview:")
+    for i, (raw, clean) in enumerate(zip(dosen_names_raw[:3], dosen_names_clean[:3]), 1):
         print(f"      {i}. {raw} → {clean}")
-    if len(dosen_names_raw) > 5:
-        print(f"      ... dan {len(dosen_names_raw) - 5} nama lainnya")
+    if len(dosen_names_raw) > 3:
+        print(f"      ... dan {len(dosen_names_raw) - 3} nama lainnya")
     print()
     
-    # Step 4: Jalankan scraper
-    print(f"[4/6] Memulai proses scraping...")
-    print(f"      Mode: {'Headless (tanpa GUI)' if HEADLESS_MODE else 'Browser visible'}")
+    # Step 4: Scraping
+    print(f"[4/6] Memulai scraping...")
+    print(f"      Mode: {'Headless' if HEADLESS_MODE else 'Browser visible'}")
     print(f"      Timeout: {WAIT_TIME} detik")
     print()
     
@@ -88,72 +84,110 @@ def main():
     try:
         df_results = scraper.run_scraper(dosen_names_clean)
     except Exception as e:
-        print(f"ERROR: Terjadi kesalahan saat scraping: {e}")
+        print(f"ERROR: {e}")
         return
     
-    # Step 5: Validasi hasil
+    # Step 5: Validasi
     print()
-    print(f"[5/6] Scraping selesai!")
-    print(f"      Total publikasi ditemukan: {len(df_results)}")
+    print(f"[5/6] Scraping selesai! Total: {len(df_results)} publikasi")
     
     if len(df_results) == 0:
-        print("      PERINGATAN: Tidak ada data yang berhasil di-scrape")
-        print("      Pastikan nama dosen benar dan memiliki profil Google Scholar")
+        print("      PERINGATAN: Tidak ada data")
         return
     
-    # Tampilkan statistik per dosen
     if 'Nama Dosen' in df_results.columns:
-        print("\n      Statistik per dosen:")
+        print("\n      Statistik:")
         stats = df_results.groupby('Nama Dosen').size().sort_values(ascending=False)
         for dosen, count in stats.items():
-            print(f"      - {dosen}: {count} publikasi")
+            print(f"      - {dosen}: {count}")
     
-    # Step 6: Simpan hasil
+    # Step 6: Simpan
     print()
-    print(f"[6/6] Menyimpan hasil ke berbagai format...")
+    print(f"[6/6] Menyimpan hasil...")
     
-    # Pastikan direktori output ada
     output_dir = ensure_output_directory(OUTPUT_DIR)
-    
-    # Ekstrak nama file input tanpa ekstensi
     input_filename = os.path.splitext(os.path.basename(INPUT_FILE_PATH))[0]
-    
-    # Buat timestamp untuk nama file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     base_filename = f"publikasi_{input_filename}_{timestamp}"
     
     try:
-        # Simpan ke CSV
         csv_path = save_to_csv(df_results, os.path.join(output_dir, f"{base_filename}.csv"))
-        print(f"      ✓ CSV disimpan: {csv_path}")
+        print(f"      ✓ CSV: {os.path.basename(csv_path)}")
         
-        # Simpan ke Excel
         excel_path = save_to_excel(df_results, os.path.join(output_dir, f"{base_filename}.xlsx"))
-        print(f"      ✓ Excel disimpan: {excel_path}")
+        print(f"      ✓ Excel: {os.path.basename(excel_path)}")
         
-        # Simpan ringkasan ke DOCX
         docx_path = generate_summary_docx(df_results, os.path.join(output_dir, f"{base_filename}_summary.docx"))
-        print(f"      ✓ Ringkasan DOCX disimpan: {docx_path}")
-        
+        print(f"      ✓ DOCX: {os.path.basename(docx_path)}")
     except Exception as e:
-        print(f"ERROR: Gagal menyimpan hasil: {e}")
+        print(f"ERROR: {e}")
         return
     
-    # Selesai
     print()
     print("=" * 70)
-    print("PROSES SELESAI!")
+    print("SELESAI!")
     print("=" * 70)
-    print(f"Semua file output tersimpan di folder: {output_dir}")
+    print(f"Output: {output_dir}")
     print()
+
+
+def run_gui():
+    """Menjalankan aplikasi dalam mode GUI."""
+    try:
+        from gui.app import GoogleScholarScraperGUI
+        import tkinter as tk
+        
+        print("Memulai GUI...")
+        root = tk.Tk()
+        app = GoogleScholarScraperGUI(root)
+        root.mainloop()
+    except ImportError as e:
+        print(f"ERROR: Gagal import GUI module: {e}")
+        print("Pastikan semua dependencies terinstall.")
+        sys.exit(1)
+
+
+def main():
+    """Main entry point dengan argparse."""
+    parser = argparse.ArgumentParser(
+        description="Google Scholar Scraper - Scraping publikasi dosen dari Google Scholar",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py              # Mode CLI (default)
+  python main.py --gui        # Mode GUI
+  python main.py --cli        # Mode CLI (explicit)
+        """
+    )
+    
+    parser.add_argument(
+        '--gui',
+        action='store_true',
+        help='Jalankan dalam mode GUI (graphical user interface)'
+    )
+    
+    parser.add_argument(
+        '--cli',
+        action='store_true',
+        help='Jalankan dalam mode CLI (command line interface) - default'
+    )
+    
+    args = parser.parse_args()
+    
+    # Determine mode
+    if args.gui:
+        run_gui()
+    else:
+        # Default to CLI
+        run_cli()
 
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\nProses dibatalkan oleh pengguna (Ctrl+C)")
+        print("\n\nDibatalkan oleh user (Ctrl+C)")
     except Exception as e:
-        print(f"\n\nERROR FATAL: {e}")
+        print(f"\n\nERROR: {e}")
         import traceback
         traceback.print_exc()

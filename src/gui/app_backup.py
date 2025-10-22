@@ -71,9 +71,6 @@ class GoogleScholarScraperGUI:
         
         # Load available input files
         self._load_input_files()
-        
-        # Initialize input mode (show batch by default)
-        self._toggle_input_mode()
     
     def _load_config(self):
         """
@@ -155,82 +152,50 @@ class GoogleScholarScraperGUI:
         main_frame = tk.Frame(self.scraping_tab, padx=20, pady=10)
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # ===== Section 1: Input Mode & File =====
+        # ===== Section 1: File Input =====
         input_section = tk.LabelFrame(
             main_frame,
-            text="📁 Mode Scraping",
+            text="📁 Pilih File Input",
             font=("Arial", 11, "bold"),
             padx=15,
             pady=15
         )
         input_section.pack(fill=tk.X, pady=(0, 10))
         
-        # Mode selection (Batch vs Single)
-        mode_frame = tk.Frame(input_section)
-        mode_frame.pack(fill=tk.X, pady=(0, 10))
+        # File selection
+        file_frame = tk.Frame(input_section)
+        file_frame.pack(fill=tk.X, pady=5)
         
         tk.Label(
-            mode_frame,
-            text="Pilih Mode:",
-            font=("Arial", 10, "bold")
-        ).pack(side=tk.LEFT, padx=(0, 15))
-        
-        batch_rb = tk.Radiobutton(
-            mode_frame,
-            text="📋 Batch (dari file)",
-            variable=self.scraping_mode,
-            value="batch",
-            font=("Arial", 10),
-            cursor="hand2",
-            command=self._toggle_input_mode
-        )
-        batch_rb.pack(side=tk.LEFT, padx=(0, 15))
-        
-        single_rb = tk.Radiobutton(
-            mode_frame,
-            text="👤 Perorangan (input manual)",
-            variable=self.scraping_mode,
-            value="single",
-            font=("Arial", 10),
-            cursor="hand2",
-            command=self._toggle_input_mode
-        )
-        single_rb.pack(side=tk.LEFT)
-        
-        # Batch mode file selection
-        self.batch_frame = tk.Frame(input_section)
-        self.batch_frame.pack(fill=tk.X, pady=5)
-        
-        tk.Label(
-            self.batch_frame,
+            file_frame,
             text="File Dosen:",
             font=("Arial", 10)
         ).pack(side=tk.LEFT, padx=(0, 10))
         
         self.file_combo = ttk.Combobox(
-            self.batch_frame,
+            file_frame,
             textvariable=self.input_file_path,
             state="readonly",
-            width=35,
+            width=40,
             font=("Arial", 10)
         )
         self.file_combo.pack(side=tk.LEFT, padx=(0, 10))
         
         refresh_btn = tk.Button(
-            self.batch_frame,
-            text="🔄",
+            file_frame,
+            text="🔄 Refresh",
             command=self._load_input_files,
             bg="#3498db",
             fg="white",
             font=("Arial", 9),
             cursor="hand2",
             relief=tk.FLAT,
-            width=3
+            padx=10
         )
         refresh_btn.pack(side=tk.LEFT, padx=(0, 5))
         
         browse_btn = tk.Button(
-            self.batch_frame,
+            file_frame,
             text="📂 Browse",
             command=self._browse_file,
             bg="#95a5a6",
@@ -241,31 +206,6 @@ class GoogleScholarScraperGUI:
             padx=10
         )
         browse_btn.pack(side=tk.LEFT)
-        
-        # Single mode name input
-        self.single_frame = tk.Frame(input_section)
-        # Don't pack yet - will be shown/hidden by toggle
-        
-        tk.Label(
-            self.single_frame,
-            text="Nama Dosen:",
-            font=("Arial", 10)
-        ).pack(side=tk.LEFT, padx=(0, 10))
-        
-        self.single_entry = tk.Entry(
-            self.single_frame,
-            textvariable=self.single_dosen_name,
-            font=("Arial", 10),
-            width=50
-        )
-        self.single_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
-        tk.Label(
-            self.single_frame,
-            text="(Contoh: Dr. John Doe, M.Kom)",
-            font=("Arial", 8),
-            fg="#666666"
-        ).pack(side=tk.LEFT, padx=(10, 0))
         
         # ===== Section 2: Output Format =====
         output_section = tk.LabelFrame(
@@ -617,23 +557,6 @@ class GoogleScholarScraperGUI:
             self.file_combo['values'] = []
             self.log("⚠️ Tidak ada file CSV/TXT di folder 'input'")
     
-    def _toggle_input_mode(self):
-        """
-        Toggle between batch and single scraping mode.
-        Show/hide appropriate input fields.
-        """
-        mode = self.scraping_mode.get()
-        
-        if mode == "batch":
-            # Show batch frame, hide single frame
-            self.single_frame.pack_forget()
-            self.batch_frame.pack(fill=tk.X, pady=5)
-        else:  # single
-            # Hide batch frame, show single frame
-            self.batch_frame.pack_forget()
-            self.single_frame.pack(fill=tk.X, pady=5)
-            self.single_entry.focus()  # Auto focus ke entry
-    
     def _browse_file(self):
         """
         Open file browser to select input file.
@@ -839,24 +762,14 @@ class GoogleScholarScraperGUI:
         """
         Start the scraping process in a separate thread.
         """
-        # Validation based on mode
-        mode = self.scraping_mode.get()
+        # Validation
+        if not self.input_file_path.get():
+            messagebox.showerror("Error", "Pilih file input terlebih dahulu!")
+            return
         
-        if mode == "batch":
-            # Validate file input
-            if not self.input_file_path.get():
-                messagebox.showerror("Error", "Pilih file input terlebih dahulu!")
-                return
-            
-            if not os.path.exists(self.input_file_path.get()):
-                messagebox.showerror("Error", f"File tidak ditemukan:\n{self.input_file_path.get()}")
-                return
-        else:  # single mode
-            # Validate name input
-            if not self.single_dosen_name.get().strip():
-                messagebox.showerror("Error", "Masukkan nama dosen terlebih dahulu!")
-                self.single_entry.focus()
-                return
+        if not os.path.exists(self.input_file_path.get()):
+            messagebox.showerror("Error", f"File tidak ditemukan:\n{self.input_file_path.get()}")
+            return
         
         # Disable start button, enable stop button
         self.start_btn.config(state=tk.DISABLED)
@@ -892,28 +805,15 @@ class GoogleScholarScraperGUI:
             self.log("=" * 60)
             self._update_status("Running...")
             
-            mode = self.scraping_mode.get()
+            input_file = self.input_file_path.get()
             
-            # Step 1: Get dosen names based on mode
-            if mode == "batch":
-                input_file = self.input_file_path.get()
-                self.log(f"\n[1/5] 📖 Membaca file: {os.path.basename(input_file)}")
-                dosen_names_raw = read_dosen_from_file(input_file)
-                self.log(f"      ✅ Berhasil membaca {len(dosen_names_raw)} nama dosen")
-                
-                if not dosen_names_raw:
-                    raise ValueError("Tidak ada nama dosen dalam file")
-                    
-                # For filename
-                input_filename = os.path.splitext(os.path.basename(input_file))[0]
-            else:  # single mode
-                single_name = self.single_dosen_name.get().strip()
-                self.log(f"\n[1/5] 👤 Mode: Scraping Perorangan")
-                self.log(f"      Nama: {single_name}")
-                dosen_names_raw = [single_name]
-                
-                # For filename - clean the name
-                input_filename = clean_dosen_name(single_name).replace(" ", "_").lower()
+            # Step 1: Read input file
+            self.log(f"\n[1/5] 📖 Membaca file: {os.path.basename(input_file)}")
+            dosen_names_raw = read_dosen_from_file(input_file)
+            self.log(f"      ✅ Berhasil membaca {len(dosen_names_raw)} nama dosen")
+            
+            if not dosen_names_raw:
+                raise ValueError("Tidak ada nama dosen dalam file")
             
             # Step 2: Clean names
             self.log(f"\n[2/5] 🧹 Membersihkan nama dari gelar akademis...")
@@ -962,6 +862,7 @@ class GoogleScholarScraperGUI:
             self.log(f"\n[5/5] 💾 Menyimpan hasil...")
             
             output_dir = ensure_output_directory("output")
+            input_filename = os.path.splitext(os.path.basename(input_file))[0]
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             base_filename = f"publikasi_{input_filename}_{timestamp}"
             

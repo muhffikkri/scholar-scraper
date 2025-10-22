@@ -1,396 +1,277 @@
-# Google Scholar Scraper - Aplikasi Scraping Publikasi Dosen
+# Google Scholar Scraper
 
-Aplikasi Python untuk scraping otomatis data publikasi dosen dari Google Scholar dengan arsitektur modular dan GUI berbasis tab.
+Aplikasi Python untuk scraping otomatis data publikasi dosen dari Google Scholar dengan GUI dan integrasi Google Sheets.
 
-## 📚 Dokumentasi Lengkap
+## 🚀 Quick Start
 
-- **[README.md](README.md)** (file ini) - Panduan umum penggunaan aplikasi
-- **[ENV_CONFIGURATION.md](ENV_CONFIGURATION.md)** - 🆕 Panduan lengkap konfigurasi file .env
-- **[APPS_SCRIPT_SETUP.md](APPS_SCRIPT_SETUP.md)** - Panduan setup Google Apps Script untuk upload data
-- **[GUI_DOCUMENTATION.md](GUI_DOCUMENTATION.md)** - Dokumentasi teknis arsitektur GUI dan komponen
+```bash
+# Clone project
+git clone [repository-url]
+cd scholar-scraper
 
-## 🏗️ Struktur Proyek
+# Setup & Run (Windows)
+setup.bat
+
+# Atau manual:
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python main.py --gui
+```
+
+## 📋 Requirements
+
+- Python 3.8+
+- Google Chrome
+- ChromeDriver (auto-install via selenium)
+
+## 🎯 Features
+
+✅ **Dual Mode**: GUI & CLI  
+✅ **Smart Scraping**: Auto-parse venue, citations, authors  
+✅ **Multi-Format Output**: Excel, CSV, DOCX  
+✅ **Google Sheets Integration**: Direct upload via Apps Script  
+✅ **Batch & Single**: Scraping multiple or individual dosen  
+✅ **Real-time Logging**: Monitor progress  
+
+## 📖 Usage
+
+### Mode 1: GUI (Recommended)
+
+```bash
+python main.py --gui
+```
+
+**Tab Scraping:**
+- Batch: Upload CSV/TXT file with dosen names
+- Single: Input one dosen name manually
+- Config: Headless mode, timeout settings
+- Output: Auto-saved to `output/` folder
+
+**Tab Upload:**
+- Select Excel file
+- Enter Google Sheets URL
+- One-click upload
+
+### Mode 2: CLI
+
+```bash
+python main.py
+```
+
+Edit `main.py` untuk konfigurasi:
+```python
+INPUT_FILE_PATH = "input/daftar_dosen.csv"
+HEADLESS_MODE = False
+WAIT_TIME = 10
+```
+
+## 📁 Project Structure
 
 ```
-google-scholar-scraper/
+scholar-scraper/
+├── main.py                 # Entry point (GUI/CLI)
+├── setup.bat               # Auto setup script
+├── requirements.txt        # Dependencies
+├── .env                    # Configuration (create from .env.example)
 ├── src/
-│   ├── core_logic/
-│   │   ├── __init__.py
-│   │   ├── scraper.py         # Logika utama Selenium & BS4
-│   │   ├── file_handler.py    # Fungsi membaca/menyimpan file
-│   │   └── utils.py           # Fungsi bantuan
-│   │
-│   └── gui/
-│       ├── __init__.py
-│       └── app.py             # Placeholder untuk GUI
-│
-├── input/                     # Folder untuk file input (buat manual)
-│   └── daftar_dosen.csv       # File input contoh
-│
-├── output/                    # Folder output (dibuat otomatis)
-│
-├── main.py                    # Entry point aplikasi
-├── README.md                  # Dokumentasi ini
-└── requirements.txt           # Dependensi Python
+│   ├── core_logic/         # Scraping logic
+│   │   ├── scraper.py
+│   │   ├── file_handler.py
+│   │   └── utils.py
+│   └── gui/                # GUI components
+│       └── app.py
+├── input/                  # Input files (CSV/TXT)
+└── output/                 # Results (auto-created)
 ```
 
-## 📋 Prasyarat
+## ⚙️ Configuration (.env)
 
-- Python 3.8 atau lebih baru
-- Google Chrome browser
-- ChromeDriver (akan diinstal otomatis dengan selenium)
+Copy `.env.example` to `.env`:
 
-## 🚀 Instalasi
+```env
+# Apps Script URL (required for Google Sheets upload)
+APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_ID/exec
 
-1. **Clone atau download proyek ini**
-
-2. **Install dependensi:**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Setup file konfigurasi (.env):**
-
-   ```bash
-   # Copy template .env
-   cp .env.example .env
-   ```
-
-   Kemudian edit file `.env` dan isi dengan konfigurasi Anda:
-
-   ```env
-   # WAJIB: URL Web App dari Google Apps Script
-   APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID_HERE/exec
-
-   # OPSIONAL: Konfigurasi default
-   DEFAULT_SHEET_NAME=Publikasi Dosen
-   DEFAULT_WAIT_TIME=10
-   DEFAULT_HEADLESS_MODE=false
-   OUTPUT_DIRECTORY=output
-   ```
-
-   > **⚠️ PENTING**: File `.env` berisi informasi sensitif (URL Apps Script) dan tidak akan di-commit ke Git.
-   > Lihat panduan lengkap di [APPS_SCRIPT_SETUP.md](APPS_SCRIPT_SETUP.md) untuk mendapatkan URL Apps Script.
-
-4. **Buat folder input dan file daftar dosen:**
-
-   Buat folder `input/` dan file `daftar_dosen.csv` atau `daftar_dosen.txt`:
-
-   **Format CSV:**
-
-   ```csv
-   Nama
-   Dr. Ir. John Doe, M.Kom., Ph.D
-   Prof. Jane Smith, S.T., M.T.
-   Drs. Ahmad Abdullah, M.Si.
-   ```
-
-   **Format TXT:**
-
-   ```
-   Dr. Ir. John Doe, M.Kom., Ph.D
-   Prof. Jane Smith, S.T., M.T.
-   Drs. Ahmad Abdullah, M.Si.
-   ```
-
-## 🎯 Cara Menggunakan
-
-### Opsi 1: Menggunakan GUI (Recommended) 🖥️
-
-1. **Jalankan aplikasi GUI:**
-
-   ```bash
-   python run_gui.py
-   ```
-
-   Atau double-click: `START_GUI.bat` (Windows)
-
-2. **GUI memiliki 2 Tab Terpisah:**
-
-#### Tab 1: 📥 Scraping Dosen
-
-Untuk melakukan scraping data publikasi dari Google Scholar:
-
-- **Pilih File Dosen**: Dropdown atau Browse untuk memilih file input (CSV/TXT)
-- **Pengaturan Scraping**:
-  - ☑️ Headless Mode: Browser tanpa GUI (lebih cepat)
-  - ⏱️ Timeout: 5-30 detik (default: 10)
-- **▶️ Mulai Scraping**: Jalankan proses scraping
-- **Log Real-time**: Monitor progress scraping
-- **Output**: File Excel akan tersimpan di folder `output/`
-
-#### Tab 2: 📤 Upload ke Google Sheets (Baru!)
-
-Untuk mengunggah data dari Excel ke Google Spreadsheet:
-
-**Section 1: Pilih File Excel**
-
-- **Browse**: Pilih file `.xlsx` secara manual dari folder output
-- **Gunakan Hasil Terakhir**: Otomatis menggunakan file hasil scraping terakhir ⚡
-
-**Section 2: Konfigurasi Google Sheets**
-
-- **Spreadsheet URL**: Paste URL Google Spreadsheet tujuan
-  - Format: `https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit`
-- **Nama Sheet**: Nama sheet yang akan dibuat/diupdate
-  - Default: "Publikasi Dosen" (dari .env)
-  - Sheet akan dibuat otomatis jika belum ada
-
-**Section 3: Upload**
-
-- **📤 Upload ke Google Sheets**: Tombol hijau untuk memulai upload
-
-**Section 4: Log Upload**
-
-- Log real-time dengan progress detail
-- Success/error messages
-
-**Workflow Recommended:**
-
-1. ✅ Scraping di Tab 1 → Simpan ke Excel
-2. ✅ Pindah ke Tab 2 → Klik "Gunakan Hasil Terakhir"
-3. ✅ Isi URL Spreadsheet → Upload!
-
-**Keuntungan Arsitektur Tab:**
-
-- ✅ Proses scraping dan upload **independen**
-- ✅ Bisa scraping dulu, upload nanti (atau sebaliknya)
-- ✅ Bisa upload file Excel dari sumber lain
-- ✅ Tidak perlu scraping ulang untuk upload ke sheet berbeda
-- ✅ Apps Script URL tersimpan aman di `.env`
-
-### Opsi 2: Menggunakan Command Line 💻
-
-1. **Konfigurasi di `main.py`:**
-
-   ```python
-   INPUT_FILE_PATH = "input/daftar_dosen.csv"  # Path file input
-   OUTPUT_DIR = "output"                        # Folder output
-   HEADLESS_MODE = False                        # True = tanpa GUI browser
-   WAIT_TIME = 10                               # Timeout dalam detik
-   ```
-
-2. **Jalankan aplikasi:**
-
-   ```bash
-   python main.py
-   ```
-
-3. **Output yang dihasilkan:**
-
-   Nama file output akan mengikuti nama file input. Contoh:
-
-   - Input: `daftar_dosen.csv`
-
-     - Output: `publikasi_daftar_dosen_YYYYMMDD_HHMMSS.csv`
-     - Output: `publikasi_daftar_dosen_YYYYMMDD_HHMMSS.xlsx`
-     - Output: `publikasi_daftar_dosen_YYYYMMDD_HHMMSS_summary.docx`
-
-   - Input: `daftar_dosen_manajemen.csv`
-     - Output: `publikasi_daftar_dosen_manajemen_YYYYMMDD_HHMMSS.csv`
-     - Output: `publikasi_daftar_dosen_manajemen_YYYYMMDD_HHMMSS.xlsx`
-     - Output: `publikasi_daftar_dosen_manajemen_YYYYMMDD_HHMMSS_summary.docx`
-
-   Format nama: `publikasi_[nama_file_input]_[timestamp].[ekstensi]`
-
-## 📦 Dependensi
-
-```
-selenium>=4.15.0
-beautifulsoup4>=4.12.0
-pandas>=2.0.0
-openpyxl>=3.1.0
-python-docx>=1.0.0
+# Optional settings
+DEFAULT_SHEET_NAME=Publikasi Dosen
+DEFAULT_WAIT_TIME=10
+DEFAULT_HEADLESS_MODE=false
+OUTPUT_DIRECTORY=output
 ```
 
-## 🔧 Fitur Utama
+## 📤 Google Sheets Setup
 
-### 1. Antarmuka GUI Berbasis Tab 🖥️
+### 1. Deploy Apps Script
 
-**Arsitektur Terpisah (Decoupled):**
+1. Buka https://script.google.com
+2. New Project → Copy code dari `apps-script-web-app.gs`
+3. Deploy → New deployment:
+   - Type: **Web app**
+   - Execute as: **Me**
+   - Who has access: **Anyone** ⚠️ PENTING!
+4. Copy Web app URL
+5. Paste ke `.env` → `APPS_SCRIPT_URL=...`
 
-- **Tab Scraping**: Fokus pada proses scraping Google Scholar → Excel
-- **Tab Upload**: Fokus pada transfer Excel → Google Sheets
-- **Pemisahan Proses**: Kedua tab bekerja independen, dihubungkan oleh file Excel
-- **Multi-threading**: Setiap tab menggunakan thread terpisah
-- **Log Terpisah**: Setiap tab memiliki log aktivitas sendiri
+### 2. Upload Data
 
-**Fitur Tab Scraping:**
-
-- Pemilihan file input dari dropdown atau browse
-- Pengaturan headless mode dan timeout
-- Progress monitoring real-time
-- Output: File Excel di folder `output/`
-
-**Fitur Tab Upload:**
-
-- Browse file Excel atau quick access ke hasil scraping terakhir
-- Input URL Google Spreadsheet dan nama sheet
-- Integrasi dengan Apps Script Web API
-- Progress upload real-time
-- Error handling yang informatif
-
-### 2. Pembersihan Nama Otomatis
-
-Menghapus gelar akademis dari nama dosen secara otomatis:
-
-- Gelar depan: Dr., Ir., Prof., Drs., Dra., H., Hj.
-- Gelar belakang: S.T., M.T., Ph.D, M.Kom., dll.
-
-### 3. Scraping Cerdas
-
-- Navigasi otomatis ke profil Google Scholar
-- Loading otomatis semua publikasi (klik "Tampilkan lainnya")
-- Deteksi data tidak lengkap dan navigasi ke halaman detail
-- Tracking publikasi yang sudah di-scrape untuk menghindari duplikasi
-
-### 4. Multi-Format Output
-
-- **CSV**: Untuk analisis data lebih lanjut
-- **Excel**: Dengan formatting otomatis
-- **Word**: Ringkasan terstruktur per dosen
-
-### 5. Error Handling
-
-- Menangani profil yang tidak ditemukan
-- Retry mechanism untuk element yang tidak ditemukan
-- Logging untuk debugging
-
-## 📊 Kolom Data yang Di-scrape
-
-| Kolom        | Deskripsi                                       |
-| ------------ | ----------------------------------------------- |
-| Nama Dosen   | Nama dosen yang di-scrape                       |
-| Judul        | Judul publikasi                                 |
-| Penulis      | Daftar penulis                                  |
-| Journal_Name | Nama jurnal/konferensi/buku                     |
-| Volume       | Volume jurnal (untuk artikel jurnal)            |
-| Issue        | Terbitan/Issue (untuk artikel jurnal)           |
-| Pages        | Halaman (untuk artikel jurnal)                  |
-| Publisher    | Nama penerbit (untuk buku/lainnya)              |
-| Tahun        | Tahun publikasi                                 |
-| Sitasi       | Jumlah sitasi                                   |
-| Link         | URL ke halaman detail artikel di Google Scholar |
-
-### Parsing Venue Otomatis
-
-Aplikasi akan secara otomatis memecah informasi venue menjadi kolom-kolom detail:
-
-**Untuk Artikel Jurnal:**
-
-- Pola: `Nama Jurnal Volume (Terbitan), Halaman`
-- Contoh: `IEEE Transactions on AI 15 (3), 45-60`
-- Hasil:
-  - `Journal_Name`: "IEEE Transactions on AI"
-  - `Volume`: "15"
-  - `Issue`: "3"
-  - `Pages`: "45-60"
-
-**Untuk Buku atau Lainnya:**
-
-- Pola: `Nama Penerbit`
-- Contoh: `Springer Nature, 2020`
-- Hasil:
-  - `Publisher`: "Springer Nature"
-  - `Tahun`: "2020"
-
-## 🖼️ Screenshot GUI
-
-GUI menyediakan antarmuka yang intuitif dengan fitur:
-
-- 📁 **File Picker**: Pilih file dari folder input dengan mudah
-- 💾 **Format Selector**: Pilih CSV, Excel, atau keduanya
-- ⚙️ **Settings**: Headless mode dan timeout kustomisasi
-- 📋 **Live Log**: Monitor progress real-time
-- ▶️ **Control Buttons**: Start/Stop scraping dengan mudah
-
-## ⚠️ Catatan Penting
-
-### Scraping:
-
-1. **Rate Limiting**: Google Scholar mungkin memblokir jika terlalu banyak request. Tambahkan jeda antar scraping jika diperlukan.
-
-2. **Browser Driver**: Pastikan ChromeDriver kompatibel dengan versi Chrome Anda.
-
-3. **Headless Mode**: Gunakan headless mode untuk scraping lebih cepat tanpa membuka browser.
-
-4. **Akurasi Data**: Validasi data hasil scraping, terutama untuk nama dosen yang memiliki publikasi banyak.
-
-### Upload ke Google Sheets:
-
-1. **Web App URL**: Pastikan Apps Script sudah di-deploy dengan akses "Anyone"
-
-2. **Spreadsheet Access**: Account yang deploy Apps Script harus punya akses Editor ke spreadsheet
-
-3. **Sheet Name**: Jika sheet tidak ada, akan dibuat otomatis. Jika sudah ada, data lama akan dihapus
-
-4. **Data Format**: File Excel harus dalam format `.xlsx` dengan struktur tabel yang valid
-
-## 🎨 Mode Penggunaan
-
-Aplikasi ini mendukung dua mode:
-
-1. **GUI Mode** (Recommended untuk pengguna umum)
-
-   ```bash
-   python run_gui.py
+1. GUI → Tab Upload
+2. Select Excel file (or use last scraped)
+3. Enter Spreadsheet URL:
    ```
-
-   - Interface visual yang mudah
-   - Tidak perlu edit kode
-   - Progress monitoring real-time
-
-2. **CLI Mode** (Untuk automation/scripting)
-   ```bash
-   python main.py
+   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
    ```
-   - Cocok untuk batch processing
-   - Dapat diintegrasikan dengan script lain
-   - Konfigurasi via file main.py
+4. Enter Sheet Name (auto-created if not exists)
+5. Click Upload
 
-## 🔮 Pengembangan Future
+## 📊 Output Columns
 
-GUI telah diimplementasikan menggunakan Tkinter dengan fitur lengkap! Pengembangan selanjutnya:
+| Column | Description |
+|--------|-------------|
+| Nama Dosen | Dosen name |
+| Judul | Publication title |
+| Penulis | Authors list |
+| Journal_Name | Journal/conference name |
+| Volume | Volume number |
+| Issue | Issue number |
+| Pages | Page range |
+| Publisher | Publisher name |
+| Tahun | Year |
+| Sitasi | Citation count |
+| Link | Google Scholar URL |
 
-- ✅ GUI dengan Tkinter - Tab Scraping (Sudah Selesai)
-- ✅ GUI Tab Upload ke Google Sheets (Sudah Selesai)
-- ✅ Apps Script Integration (Sudah Selesai)
-- ⬜ Export ke format tambahan (JSON, XML)
-- ⬜ Visualisasi data publikasi
-- ⬜ Filter dan pencarian lanjutan
-- ⬜ Scheduled scraping
-- ⬜ Database integration
-- ⬜ Batch upload multiple files
+## 🔧 Advanced
+
+### Input File Format
+
+**CSV:**
+```csv
+Nama
+Dr. John Doe, M.Kom
+Prof. Jane Smith, Ph.D
+```
+
+**TXT:**
+```
+Dr. John Doe, M.Kom
+Prof. Jane Smith, Ph.D
+```
+
+### Output Files
+
+```
+output/
+├── publikasi_daftar_dosen_20241022_143000.xlsx
+├── publikasi_daftar_dosen_20241022_143000.csv
+└── publikasi_daftar_dosen_20241022_143000_summary.docx
+```
+
+Single scraping:
+```
+publikasi_John_Doe_20241022_143000.xlsx
+```
 
 ## 🐛 Troubleshooting
 
-### Error: ChromeDriver not found
+### Error 403 Forbidden (Upload)
+
+**Cause:** Apps Script permission not set to "Anyone"
+
+**Fix:**
+1. script.google.com → Your project
+2. Deploy → Manage deployments → Edit
+3. **Who has access** = **Anyone** (not "Anyone with Google account")
+4. Deploy → Copy new URL
+5. Update `.env` → Restart app
+
+### ChromeDriver Error
 
 ```bash
 pip install --upgrade selenium
 ```
 
-### Error: File input tidak ditemukan
+### Log Not Visible (GUI)
 
-Pastikan path di `INPUT_FILE_PATH` benar dan file ada.
+- Resize window (drag borders)
+- Scroll down in tab
+- Check terminal for backend logs
 
-### Scraping terlalu lambat
+### Slow Scraping
 
-- Set `HEADLESS_MODE = True`
-- Kurangi `WAIT_TIME` (hati-hati dengan timeout)
-- Pastikan koneksi internet stabil
+- Enable headless mode (checkbox in GUI)
+- Reduce wait time (but may cause timeouts)
+- Check internet connection
 
-### Profil tidak ditemukan
+## 📦 Dependencies
 
-- Periksa ejaan nama dosen
-- Pastikan dosen memiliki profil Google Scholar
-- Coba gunakan nama yang lebih spesifik
+```
+selenium>=4.15.0          # Web automation
+beautifulsoup4>=4.12.0    # HTML parsing
+pandas>=2.0.0             # Data manipulation
+openpyxl>=3.1.0           # Excel files
+python-docx>=1.0.0        # Word documents
+requests>=2.31.0          # HTTP requests
+python-dotenv>=1.0.0      # Environment variables
+```
 
-## 📝 Lisensi
+## 🔒 Security
 
-Proyek ini untuk keperluan riset dan edukasi. Gunakan dengan bijak dan patuhi Terms of Service Google Scholar.
+- `.env` file is git-ignored (contains sensitive URLs)
+- Apps Script URL acts as API key
+- Only you can access your spreadsheets
+- "Anyone" permission is safe (script runs with your credentials)
 
-## 👨‍💻 Kontributor
+## 🎨 GUI Tips
 
-Dikembangkan untuk keperluan riset NLP dan scraping data akademik.
+- **Batch Scraping**: Use dropdown or browse to select CSV/TXT
+- **Single Scraping**: Click radio button, enter name manually
+- **Quick Upload**: After scraping, click "Use Last Result" in Upload tab
+- **Headless Mode**: Faster, no browser window
+- **Logs**: Real-time progress with timestamps
+
+## 🚧 Known Limitations
+
+- Google Scholar may rate-limit heavy scraping
+- Requires exact dosen name (as appears on Google Scholar)
+- ChromeDriver must match Chrome version (auto-handled by selenium)
+- Network timeout on slow connections
+
+## 📝 License
+
+For research and educational purposes. Respect Google Scholar's Terms of Service.
+
+## 🤝 Contributing
+
+Issues and pull requests welcome!
+
+## 📞 Support
+
+- Check logs in GUI for errors
+- Verify `.env` configuration
+- Ensure Chrome is installed
+- Test with single dosen first
+
+---
+
+**Quick Commands:**
+
+```bash
+# GUI Mode
+python main.py --gui
+
+# CLI Mode
+python main.py
+
+# Setup Everything
+setup.bat
+
+# Check Python
+python --version
+
+# Install Dependencies
+pip install -r requirements.txt
+```
+
+---
+
+Made with ❤️ for academic research
