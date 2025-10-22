@@ -115,9 +115,12 @@ def main():
     # Pastikan direktori output ada
     output_dir = ensure_output_directory(OUTPUT_DIR)
     
+    # Ekstrak nama file input tanpa ekstensi
+    input_filename = os.path.splitext(os.path.basename(INPUT_FILE_PATH))[0]
+    
     # Buat timestamp untuk nama file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_filename = f"{OUTPUT_PREFIX}_{timestamp}"
+    base_filename = f"publikasi_{input_filename}_{timestamp}"
     
     try:
         # Simpan ke CSV

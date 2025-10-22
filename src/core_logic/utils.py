@@ -18,27 +18,53 @@ def clean_dosen_name(full_name: str) -> str:
         str: Nama dosen yang sudah dibersihkan dari gelar
         
     Examples:
-        >>> clean_dosen_name("Dr. Ir. John Doe, M.Kom., Ph.D")
-        "John Doe"
-        >>> clean_dosen_name("Prof. Jane Smith, S.T., M.T.")
-        "Jane Smith"
+        >>> clean_dosen_name("Dr. Ir. Bambang Riyanto, M.Kom., Ph.D")
+        "Bambang Riyanto"
+        >>> clean_dosen_name("Prof. Siti Nurhaliza, S.T., M.T.")
+        "Siti Nurhaliza"
+        >>> clean_dosen_name("Drs. Ahmad Dahlan, M.Si.")
+        "Ahmad Dahlan"
     """
     if not full_name or not isinstance(full_name, str):
         return ""
     
-    # Daftar gelar akademis yang umum
+    # Daftar gelar akademis yang umum (dengan word boundary yang lebih ketat)
+    # Gelar depan harus diikuti titik dan spasi atau titik di akhir kata
     gelar_depan = [
-        r'\bDr\.\s*', r'\bIr\.\s*', r'\bProf\.\s*', r'\bDrs\.\s*',
-        r'\bDra\.\s*', r'\bH\.\s*', r'\bHj\.\s*', r'\bHC\.\s*'
+        r'\bProf\.?\s+',      # Prof. atau Prof diikuti spasi
+        r'\bDr\.?\s+',        # Dr. atau Dr diikuti spasi
+        r'\bIr\.?\s+',        # Ir. atau Ir diikuti spasi
+        r'\bDrs\.?\s+',       # Drs. atau Drs diikuti spasi
+        r'\bDra\.?\s+',       # Dra. atau Dra diikuti spasi
+        r'\bHC\.?\s+',        # HC. atau HC diikuti spasi
+        r'\bH\.?\s+',         # H. atau H diikuti spasi (harus setelah HC untuk menghindari konflik)
+        r'\bHj\.?\s+',        # Hj. atau Hj diikuti spasi
     ]
     
+    # Gelar belakang dengan koma opsional
     gelar_belakang = [
-        r',?\s*S\.T\.?', r',?\s*S\.Si\.?', r',?\s*S\.Kom\.?', r',?\s*S\.Pd\.?',
-        r',?\s*M\.T\.?', r',?\s*M\.Si\.?', r',?\s*M\.Kom\.?', r',?\s*M\.Pd\.?',
-        r',?\s*M\.Sc\.?', r',?\s*M\.A\.?', r',?\s*M\.M\.?', r',?\s*MBA\.?',
-        r',?\s*Ph\.?D\.?', r',?\s*Ph\.D', r',?\s*PhD', r',?\s*M\.Eng\.?',
-        r',?\s*Dr\.?', r',?\s*S\.E\.?', r',?\s*M\.E\.?', r',?\s*S\.H\.?',
-        r',?\s*M\.H\.?', r',?\s*S\.Sos\.?', r',?\s*M\.Sos\.?'
+        r',?\s*S\.T\.?',      # S.T. atau S.T
+        r',?\s*S\.Si\.?',     # S.Si. atau S.Si
+        r',?\s*S\.Kom\.?',    # S.Kom. atau S.Kom
+        r',?\s*S\.Pd\.?',     # S.Pd. atau S.Pd
+        r',?\s*S\.E\.?',      # S.E. atau S.E
+        r',?\s*S\.H\.?',      # S.H. atau S.H
+        r',?\s*S\.Sos\.?',    # S.Sos. atau S.Sos
+        r',?\s*M\.T\.?',      # M.T. atau M.T
+        r',?\s*M\.Si\.?',     # M.Si. atau M.Si
+        r',?\s*M\.Kom\.?',    # M.Kom. atau M.Kom
+        r',?\s*M\.Pd\.?',     # M.Pd. atau M.Pd
+        r',?\s*M\.Sc\.?',     # M.Sc. atau M.Sc
+        r',?\s*M\.A\.?',      # M.A. atau M.A
+        r',?\s*M\.M\.?',      # M.M. atau M.M
+        r',?\s*M\.E\.?',      # M.E. atau M.E
+        r',?\s*M\.H\.?',      # M.H. atau M.H
+        r',?\s*M\.Sos\.?',    # M.Sos. atau M.Sos
+        r',?\s*M\.Eng\.?',    # M.Eng. atau M.Eng
+        r',?\s*MBA\.?',       # MBA. atau MBA
+        r',?\s*Ph\.?D\.?',    # Ph.D. atau PhD atau Ph.D
+        r',?\s*PhD',          # PhD
+        r',?\s*Dr\.?',        # Dr. di belakang
     ]
     
     # Hapus gelar depan
@@ -55,8 +81,8 @@ def clean_dosen_name(full_name: str) -> str:
     cleaned_name = re.sub(r'\s+', ' ', cleaned_name)
     cleaned_name = cleaned_name.strip()
     
-    # Hapus karakter khusus yang tidak perlu
-    cleaned_name = re.sub(r'[,;]$', '', cleaned_name)
+    # Hapus karakter khusus yang tidak perlu (koma atau titik koma di akhir)
+    cleaned_name = re.sub(r'[,;.]+$', '', cleaned_name)
     
     return cleaned_name.strip()
 

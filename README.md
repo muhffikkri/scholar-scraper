@@ -66,6 +66,26 @@ google-scholar-scraper/
 
 ## 🎯 Cara Menggunakan
 
+### Opsi 1: Menggunakan GUI (Recommended) 🖥️
+
+1. **Jalankan aplikasi GUI:**
+
+   ```bash
+   python run_gui.py
+   ```
+
+2. **Langkah-langkah di GUI:**
+   - Pilih file input dari dropdown atau klik **Browse** untuk memilih file
+   - Pilih format output: **CSV**, **Excel**, atau **Keduanya**
+   - Atur pengaturan lanjutan (opsional):
+     - Centang **Headless Mode** untuk scraping lebih cepat tanpa browser GUI
+     - Atur **Timeout** sesuai kecepatan internet Anda
+   - Klik **▶️ Mulai Scraping**
+   - Monitor progress di log aktivitas
+   - File hasil akan tersimpan di folder `output/`
+
+### Opsi 2: Menggunakan Command Line 💻
+
 1. **Konfigurasi di `main.py`:**
 
    ```python
@@ -82,9 +102,21 @@ google-scholar-scraper/
    ```
 
 3. **Output yang dihasilkan:**
-   - `publikasi_dosen_YYYYMMDD_HHMMSS.csv` - Data dalam format CSV
-   - `publikasi_dosen_YYYYMMDD_HHMMSS.xlsx` - Data dalam format Excel
-   - `publikasi_dosen_YYYYMMDD_HHMMSS_summary.docx` - Ringkasan dalam Word
+
+   Nama file output akan mengikuti nama file input. Contoh:
+
+   - Input: `daftar_dosen.csv`
+
+     - Output: `publikasi_daftar_dosen_YYYYMMDD_HHMMSS.csv`
+     - Output: `publikasi_daftar_dosen_YYYYMMDD_HHMMSS.xlsx`
+     - Output: `publikasi_daftar_dosen_YYYYMMDD_HHMMSS_summary.docx`
+
+   - Input: `daftar_dosen_manajemen.csv`
+     - Output: `publikasi_daftar_dosen_manajemen_YYYYMMDD_HHMMSS.csv`
+     - Output: `publikasi_daftar_dosen_manajemen_YYYYMMDD_HHMMSS.xlsx`
+     - Output: `publikasi_daftar_dosen_manajemen_YYYYMMDD_HHMMSS_summary.docx`
+
+   Format nama: `publikasi_[nama_file_input]_[timestamp].[ekstensi]`
 
 ## 📦 Dependensi
 
@@ -98,27 +130,36 @@ python-docx>=1.0.0
 
 ## 🔧 Fitur Utama
 
-### 1. Pembersihan Nama Otomatis
+### 1. Antarmuka GUI yang User-Friendly 🖥️
+
+- **Pemilihan File Mudah**: Dropdown untuk memilih file dari folder input atau browse manual
+- **Pilihan Format Output**: CSV, Excel, atau keduanya sekaligus
+- **Pengaturan Lanjutan**: Headless mode dan timeout yang dapat dikustomisasi
+- **Log Real-time**: Monitor progress scraping secara langsung
+- **Status Bar**: Indikator status proses yang jelas
+- **Multi-threading**: GUI tetap responsif selama scraping berjalan
+
+### 2. Pembersihan Nama Otomatis
 
 Menghapus gelar akademis dari nama dosen secara otomatis:
 
 - Gelar depan: Dr., Ir., Prof., Drs., Dra., H., Hj.
 - Gelar belakang: S.T., M.T., Ph.D, M.Kom., dll.
 
-### 2. Scraping Cerdas
+### 3. Scraping Cerdas
 
 - Navigasi otomatis ke profil Google Scholar
 - Loading otomatis semua publikasi (klik "Tampilkan lainnya")
 - Deteksi data tidak lengkap dan navigasi ke halaman detail
 - Tracking publikasi yang sudah di-scrape untuk menghindari duplikasi
 
-### 3. Multi-Format Output
+### 4. Multi-Format Output
 
 - **CSV**: Untuk analisis data lebih lanjut
 - **Excel**: Dengan formatting otomatis
 - **Word**: Ringkasan terstruktur per dosen
 
-### 4. Error Handling
+### 5. Error Handling
 
 - Menangani profil yang tidak ditemukan
 - Retry mechanism untuk element yang tidak ditemukan
@@ -162,6 +203,16 @@ Aplikasi akan secara otomatis memecah informasi venue menjadi kolom-kolom detail
   - `Publisher`: "Springer Nature"
   - `Tahun`: "2020"
 
+## 🖼️ Screenshot GUI
+
+GUI menyediakan antarmuka yang intuitif dengan fitur:
+
+- 📁 **File Picker**: Pilih file dari folder input dengan mudah
+- 💾 **Format Selector**: Pilih CSV, Excel, atau keduanya
+- ⚙️ **Settings**: Headless mode dan timeout kustomisasi
+- 📋 **Live Log**: Monitor progress real-time
+- ▶️ **Control Buttons**: Start/Stop scraping dengan mudah
+
 ## ⚠️ Catatan Penting
 
 1. **Rate Limiting**: Google Scholar mungkin memblokir jika terlalu banyak request. Tambahkan jeda antar scraping jika diperlukan.
@@ -172,13 +223,38 @@ Aplikasi akan secara otomatis memecah informasi venue menjadi kolom-kolom detail
 
 4. **Akurasi Data**: Validasi data hasil scraping, terutama untuk nama dosen yang memiliki publikasi banyak.
 
-## 🔮 Pengembangan Future (GUI)
+## 🎨 Mode Penggunaan
 
-Placeholder GUI telah disiapkan di `src/gui/app.py` untuk pengembangan antarmuka pengguna menggunakan:
+Aplikasi ini mendukung dua mode:
 
-- PyQt5/PyQt6
-- Tkinter
-- Atau framework GUI Python lainnya
+1. **GUI Mode** (Recommended untuk pengguna umum)
+
+   ```bash
+   python run_gui.py
+   ```
+
+   - Interface visual yang mudah
+   - Tidak perlu edit kode
+   - Progress monitoring real-time
+
+2. **CLI Mode** (Untuk automation/scripting)
+   ```bash
+   python main.py
+   ```
+   - Cocok untuk batch processing
+   - Dapat diintegrasikan dengan script lain
+   - Konfigurasi via file main.py
+
+## 🔮 Pengembangan Future
+
+GUI telah diimplementasikan menggunakan Tkinter dengan fitur lengkap! Pengembangan selanjutnya:
+
+- ✅ GUI dengan Tkinter (Sudah Selesai)
+- ⬜ Export ke format tambahan (JSON, XML)
+- ⬜ Visualisasi data publikasi
+- ⬜ Filter dan pencarian lanjutan
+- ⬜ Scheduled scraping
+- ⬜ Database integration
 
 ## 🐛 Troubleshooting
 
