@@ -5,11 +5,29 @@ Menangani operasi baca/tulis file untuk berbagai format (CSV, TXT, XLSX, DOCX).
 
 import csv
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 import pandas as pd
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from dotenv import load_dotenv
+
+# Load environment variables dari file .env
+load_dotenv()
+
+
+def get_config(key: str, default: Optional[str] = None) -> Optional[str]:
+    """
+    Mendapatkan nilai konfigurasi dari environment variable (.env file).
+    
+    Args:
+        key (str): Nama konfigurasi yang ingin diambil
+        default (Optional[str]): Nilai default jika konfigurasi tidak ditemukan
+        
+    Returns:
+        Optional[str]: Nilai konfigurasi atau default
+    """
+    return os.getenv(key, default)
 
 
 def read_dosen_from_file(filepath: str) -> List[str]:
@@ -237,3 +255,139 @@ def ensure_output_directory(directory: str = 'output') -> str:
     if not os.path.exists(directory):
         os.makedirs(directory)
     return os.path.abspath(directory)
+
+
+def transfer_data_to_sheets(
+    excel_file_path: str,
+    spreadsheet_url: str,
+    sheet_name: str = None,
+    web_app_url: str = None,
+    status_callback=None
+) -> dict:
+    """
+    Transfer data dari file Excel lokal ke Google Spreadsheet melalui Apps Script Web API.
+    
+    Args:
+        excel_file_path (str): Path ke file Excel yang akan diupload
+        spreadsheet_url (str): URL Google Spreadsheet tujuan
+        sheet_name (str, optional): Nama sheet di Google Spreadsheet. 
+                                    Jika None, akan menggunakan DEFAULT_SHEET_NAME dari .env
+        web_app_url (str, optional): URL Web App dari Apps Script.
+                                     Jika None, akan menggunakan APPS_SCRIPT_URL dari .env
+        status_callback (callable, optional): Fungsi callback untuk update status
+        
+    Returns:
+        dict: Response dari API dengan status dan pesan
+        
+    Raises:
+        FileNotFoundError: Jika file Excel tidak ditemukan
+        ValueError: Jika format file tidak valid atau konfigurasi tidak lengkap
+    """
+    import requests
+    import json
+    from src.core_logic.utils import extract_spreadsheet_id_from_url
+    
+    # Gunakan nilai dari .env jika parameter tidak diberikan
+    if web_app_url is None:
+        web_app_url = get_config('APPS_SCRIPT_URL')
+        if not web_app_url or web_app_url == 'https://script.google.com/macros/s/YOUR_SCRIPT_ID_HERE/exec':
+            raise ValueError(
+                "APPS_SCRIPT_URL tidak ditemukan atau belum dikonfigurasi.\n"
+                "Silakan isi APPS_SCRIPT_URL di file .env\n"
+                "Gunakan .env.example sebagai template."
+            )
+    
+    if sheet_name is None:
+        sheet_name = get_config('DEFAULT_SHEET_NAME', 'Publikasi Dosen')
+    
+    def log(message):
+        if status_callback:
+            status_callback(message)
+    
+    # Validasi file
+    if not os.path.exists(excel_file_path):
+        raise FileNotFoundError(f"File tidak ditemukan: {excel_file_path}")
+    
+    if not excel_file_path.endswith('.xlsx'):
+        raise ValueError("File harus berformat .xlsx")
+    
+    log("📖 Membaca data dari file Excel...")
+    
+    # Baca file Excel
+    try:
+        df = pd.read_excel(excel_file_path)
+        log(f"✅ Berhasil membaca {len(df)} baris data")
+    except Exception as e:
+        raise ValueError(f"Gagal membaca file Excel: {e}")
+    
+    # Ekstrak Spreadsheet ID
+    log("🔍 Mengekstrak Spreadsheet ID dari URL...")
+    spreadsheet_id = extract_spreadsheet_id_from_url(spreadsheet_url)
+    
+    if not spreadsheet_id:
+        raise ValueError("URL Google Spreadsheet tidak valid")
+    
+    log(f"✅ Spreadsheet ID: {spreadsheet_id}")
+    
+    # Konversi DataFrame ke format yang dikirim ke API
+    log("📦 Menyiapkan data untuk transfer...")
+    
+    # Header
+    headers = df.columns.tolist()
+    
+    # Data rows
+    data_rows = df.values.tolist()
+    
+    # Convert semua nilai ke string untuk menghindari masalah JSON
+    data_rows = [[str(cell) if pd.notna(cell) else "" for cell in row] for row in data_rows]
+    
+    # Gabungkan header dan data
+    all_data = [headers] + data_rows
+    
+    log(f"📊 Total kolom: {len(headers)}")
+    log(f"📊 Total baris data: {len(data_rows)}")
+    
+    # Siapkan payload untuk API
+    payload = {
+        "spreadsheetId": spreadsheet_id,
+        "sheetName": sheet_name,
+        "data": all_data
+    }
+    
+    log("🚀 Mengirim data ke Google Sheets...")
+    log(f"   Target: {sheet_name}")
+    
+    try:
+        # Kirim POST request ke Apps Script Web App
+        response = requests.post(
+            web_app_url,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=60
+        )
+        
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get("status") == "success":
+            log("✅ SUKSES: Data berhasil ditulis ke Google Sheets!")
+            log(f"   Spreadsheet ID: {spreadsheet_id}")
+            log(f"   Sheet: {sheet_name}")
+            log(f"   Baris ditulis: {len(all_data)}")
+            return result
+        else:
+            error_msg = result.get("message", "Unknown error")
+            log(f"❌ GAGAL: {error_msg}")
+            raise Exception(error_msg)
+            
+    except requests.exceptions.Timeout:
+        log("❌ ERROR: Request timeout (>60 detik)")
+        raise Exception("Request timeout. Coba lagi atau periksa koneksi internet.")
+    
+    except requests.exceptions.RequestException as e:
+        log(f"❌ ERROR: Gagal menghubungi server - {e}")
+        raise Exception(f"Gagal menghubungi server: {e}")
+    
+    except json.JSONDecodeError:
+        log("❌ ERROR: Response dari server tidak valid")
+        raise Exception("Response dari server tidak valid (bukan JSON)")

@@ -1,6 +1,13 @@
 # Google Scholar Scraper - Aplikasi Scraping Publikasi Dosen
 
-Aplikasi Python untuk scraping otomatis data publikasi dosen dari Google Scholar dengan arsitektur modular.
+Aplikasi Python untuk scraping otomatis data publikasi dosen dari Google Scholar dengan arsitektur modular dan GUI berbasis tab.
+
+## 📚 Dokumentasi Lengkap
+
+- **[README.md](README.md)** (file ini) - Panduan umum penggunaan aplikasi
+- **[ENV_CONFIGURATION.md](ENV_CONFIGURATION.md)** - 🆕 Panduan lengkap konfigurasi file .env
+- **[APPS_SCRIPT_SETUP.md](APPS_SCRIPT_SETUP.md)** - Panduan setup Google Apps Script untuk upload data
+- **[GUI_DOCUMENTATION.md](GUI_DOCUMENTATION.md)** - Dokumentasi teknis arsitektur GUI dan komponen
 
 ## 🏗️ Struktur Proyek
 
@@ -43,7 +50,30 @@ google-scholar-scraper/
    pip install -r requirements.txt
    ```
 
-3. **Buat folder input dan file daftar dosen:**
+3. **Setup file konfigurasi (.env):**
+
+   ```bash
+   # Copy template .env
+   cp .env.example .env
+   ```
+
+   Kemudian edit file `.env` dan isi dengan konfigurasi Anda:
+
+   ```env
+   # WAJIB: URL Web App dari Google Apps Script
+   APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID_HERE/exec
+
+   # OPSIONAL: Konfigurasi default
+   DEFAULT_SHEET_NAME=Publikasi Dosen
+   DEFAULT_WAIT_TIME=10
+   DEFAULT_HEADLESS_MODE=false
+   OUTPUT_DIRECTORY=output
+   ```
+
+   > **⚠️ PENTING**: File `.env` berisi informasi sensitif (URL Apps Script) dan tidak akan di-commit ke Git.
+   > Lihat panduan lengkap di [APPS_SCRIPT_SETUP.md](APPS_SCRIPT_SETUP.md) untuk mendapatkan URL Apps Script.
+
+4. **Buat folder input dan file daftar dosen:**
 
    Buat folder `input/` dan file `daftar_dosen.csv` atau `daftar_dosen.txt`:
 
@@ -74,15 +104,61 @@ google-scholar-scraper/
    python run_gui.py
    ```
 
-2. **Langkah-langkah di GUI:**
-   - Pilih file input dari dropdown atau klik **Browse** untuk memilih file
-   - Pilih format output: **CSV**, **Excel**, atau **Keduanya**
-   - Atur pengaturan lanjutan (opsional):
-     - Centang **Headless Mode** untuk scraping lebih cepat tanpa browser GUI
-     - Atur **Timeout** sesuai kecepatan internet Anda
-   - Klik **▶️ Mulai Scraping**
-   - Monitor progress di log aktivitas
-   - File hasil akan tersimpan di folder `output/`
+   Atau double-click: `START_GUI.bat` (Windows)
+
+2. **GUI memiliki 2 Tab Terpisah:**
+
+#### Tab 1: 📥 Scraping Dosen
+
+Untuk melakukan scraping data publikasi dari Google Scholar:
+
+- **Pilih File Dosen**: Dropdown atau Browse untuk memilih file input (CSV/TXT)
+- **Pengaturan Scraping**:
+  - ☑️ Headless Mode: Browser tanpa GUI (lebih cepat)
+  - ⏱️ Timeout: 5-30 detik (default: 10)
+- **▶️ Mulai Scraping**: Jalankan proses scraping
+- **Log Real-time**: Monitor progress scraping
+- **Output**: File Excel akan tersimpan di folder `output/`
+
+#### Tab 2: 📤 Upload ke Google Sheets (Baru!)
+
+Untuk mengunggah data dari Excel ke Google Spreadsheet:
+
+**Section 1: Pilih File Excel**
+
+- **Browse**: Pilih file `.xlsx` secara manual dari folder output
+- **Gunakan Hasil Terakhir**: Otomatis menggunakan file hasil scraping terakhir ⚡
+
+**Section 2: Konfigurasi Google Sheets**
+
+- **Spreadsheet URL**: Paste URL Google Spreadsheet tujuan
+  - Format: `https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit`
+- **Nama Sheet**: Nama sheet yang akan dibuat/diupdate
+  - Default: "Publikasi Dosen" (dari .env)
+  - Sheet akan dibuat otomatis jika belum ada
+
+**Section 3: Upload**
+
+- **📤 Upload ke Google Sheets**: Tombol hijau untuk memulai upload
+
+**Section 4: Log Upload**
+
+- Log real-time dengan progress detail
+- Success/error messages
+
+**Workflow Recommended:**
+
+1. ✅ Scraping di Tab 1 → Simpan ke Excel
+2. ✅ Pindah ke Tab 2 → Klik "Gunakan Hasil Terakhir"
+3. ✅ Isi URL Spreadsheet → Upload!
+
+**Keuntungan Arsitektur Tab:**
+
+- ✅ Proses scraping dan upload **independen**
+- ✅ Bisa scraping dulu, upload nanti (atau sebaliknya)
+- ✅ Bisa upload file Excel dari sumber lain
+- ✅ Tidak perlu scraping ulang untuk upload ke sheet berbeda
+- ✅ Apps Script URL tersimpan aman di `.env`
 
 ### Opsi 2: Menggunakan Command Line 💻
 
@@ -130,14 +206,30 @@ python-docx>=1.0.0
 
 ## 🔧 Fitur Utama
 
-### 1. Antarmuka GUI yang User-Friendly 🖥️
+### 1. Antarmuka GUI Berbasis Tab 🖥️
 
-- **Pemilihan File Mudah**: Dropdown untuk memilih file dari folder input atau browse manual
-- **Pilihan Format Output**: CSV, Excel, atau keduanya sekaligus
-- **Pengaturan Lanjutan**: Headless mode dan timeout yang dapat dikustomisasi
-- **Log Real-time**: Monitor progress scraping secara langsung
-- **Status Bar**: Indikator status proses yang jelas
-- **Multi-threading**: GUI tetap responsif selama scraping berjalan
+**Arsitektur Terpisah (Decoupled):**
+
+- **Tab Scraping**: Fokus pada proses scraping Google Scholar → Excel
+- **Tab Upload**: Fokus pada transfer Excel → Google Sheets
+- **Pemisahan Proses**: Kedua tab bekerja independen, dihubungkan oleh file Excel
+- **Multi-threading**: Setiap tab menggunakan thread terpisah
+- **Log Terpisah**: Setiap tab memiliki log aktivitas sendiri
+
+**Fitur Tab Scraping:**
+
+- Pemilihan file input dari dropdown atau browse
+- Pengaturan headless mode dan timeout
+- Progress monitoring real-time
+- Output: File Excel di folder `output/`
+
+**Fitur Tab Upload:**
+
+- Browse file Excel atau quick access ke hasil scraping terakhir
+- Input URL Google Spreadsheet dan nama sheet
+- Integrasi dengan Apps Script Web API
+- Progress upload real-time
+- Error handling yang informatif
 
 ### 2. Pembersihan Nama Otomatis
 
@@ -215,13 +307,25 @@ GUI menyediakan antarmuka yang intuitif dengan fitur:
 
 ## ⚠️ Catatan Penting
 
+### Scraping:
+
 1. **Rate Limiting**: Google Scholar mungkin memblokir jika terlalu banyak request. Tambahkan jeda antar scraping jika diperlukan.
 
 2. **Browser Driver**: Pastikan ChromeDriver kompatibel dengan versi Chrome Anda.
 
-3. **Headless Mode**: Gunakan `HEADLESS_MODE = True` untuk scraping tanpa membuka browser (lebih cepat).
+3. **Headless Mode**: Gunakan headless mode untuk scraping lebih cepat tanpa membuka browser.
 
 4. **Akurasi Data**: Validasi data hasil scraping, terutama untuk nama dosen yang memiliki publikasi banyak.
+
+### Upload ke Google Sheets:
+
+1. **Web App URL**: Pastikan Apps Script sudah di-deploy dengan akses "Anyone"
+
+2. **Spreadsheet Access**: Account yang deploy Apps Script harus punya akses Editor ke spreadsheet
+
+3. **Sheet Name**: Jika sheet tidak ada, akan dibuat otomatis. Jika sudah ada, data lama akan dihapus
+
+4. **Data Format**: File Excel harus dalam format `.xlsx` dengan struktur tabel yang valid
 
 ## 🎨 Mode Penggunaan
 
@@ -249,12 +353,15 @@ Aplikasi ini mendukung dua mode:
 
 GUI telah diimplementasikan menggunakan Tkinter dengan fitur lengkap! Pengembangan selanjutnya:
 
-- ✅ GUI dengan Tkinter (Sudah Selesai)
+- ✅ GUI dengan Tkinter - Tab Scraping (Sudah Selesai)
+- ✅ GUI Tab Upload ke Google Sheets (Sudah Selesai)
+- ✅ Apps Script Integration (Sudah Selesai)
 - ⬜ Export ke format tambahan (JSON, XML)
 - ⬜ Visualisasi data publikasi
 - ⬜ Filter dan pencarian lanjutan
 - ⬜ Scheduled scraping
 - ⬜ Database integration
+- ⬜ Batch upload multiple files
 
 ## 🐛 Troubleshooting
 

@@ -1,6 +1,6 @@
 """
 GUI Application for Google Scholar Scraper
-Menggunakan Tkinter untuk antarmuka pengguna yang sederhana dan intuitif.
+Menggunakan Tkinter dengan tab untuk memisahkan fungsionalitas scraping dan upload.
 """
 
 import tkinter as tk
@@ -9,6 +9,10 @@ import os
 import sys
 import threading
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Add parent directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -18,7 +22,9 @@ from src.core_logic.file_handler import (
     save_to_csv,
     save_to_excel,
     generate_summary_docx,
-    ensure_output_directory
+    ensure_output_directory,
+    transfer_data_to_sheets,
+    get_config
 )
 from src.core_logic.utils import clean_dosen_name
 from src.core_logic.scraper import GoogleScholarScraper
@@ -38,21 +44,55 @@ class GoogleScholarScraperGUI:
         """
         self.root = root
         self.root.title("Google Scholar Scraper - Aplikasi Scraping Publikasi Dosen")
-        self.root.geometry("800x700")
-        self.root.resizable(False, False)
+        self.root.geometry("900x750")
+        self.root.resizable(True, True)
         
-        # Variables
+        # Variables for Scraping Tab
         self.input_file_path = tk.StringVar()
-        self.output_format = tk.StringVar(value="csv")  # Default: CSV
+        self.output_format = tk.StringVar(value="excel")  # Default: Excel
         self.headless_mode = tk.BooleanVar(value=False)
         self.wait_time = tk.IntVar(value=10)
         self.is_running = False
+        self.last_scraped_file = None  # Track last scraped Excel file
+        
+        # Variables for Upload Tab
+        self.excel_file_path = tk.StringVar()
+        self.spreadsheet_url = tk.StringVar()
+        self.sheet_name = tk.StringVar()
+        self.is_uploading = False
+        
+        # Load configuration from .env
+        self._load_config()
         
         # Setup GUI components
         self._setup_ui()
         
         # Load available input files
         self._load_input_files()
+    
+    def _load_config(self):
+        """
+        Load configuration from .env file and check if properly configured.
+        """
+        self.config = {
+            'apps_script_url': get_config('APPS_SCRIPT_URL', ''),
+            'default_sheet_name': get_config('DEFAULT_SHEET_NAME', 'Publikasi Dosen'),
+            'default_wait_time': int(get_config('DEFAULT_WAIT_TIME', '10')),
+            'default_headless': get_config('DEFAULT_HEADLESS_MODE', 'false').lower() == 'true',
+            'output_directory': get_config('OUTPUT_DIRECTORY', 'output')
+        }
+        
+        # Update default values based on config
+        self.wait_time.set(self.config['default_wait_time'])
+        self.headless_mode.set(self.config['default_headless'])
+        
+        # Check if .env file exists
+        if not os.path.exists('.env'):
+            self.config_warning = "⚠️ File .env tidak ditemukan. Gunakan .env.example sebagai template."
+        elif not self.config['apps_script_url'] or 'YOUR_SCRIPT_ID_HERE' in self.config['apps_script_url']:
+            self.config_warning = "⚠️ APPS_SCRIPT_URL belum dikonfigurasi di file .env"
+        else:
+            self.config_warning = None
     
     def _setup_ui(self):
         """
@@ -72,8 +112,60 @@ class GoogleScholarScraperGUI:
         )
         title_label.pack(pady=20)
         
+        # Configuration Warning (if any)
+        if self.config_warning:
+            warning_frame = tk.Frame(self.root, bg="#fff3cd", relief=tk.SOLID, borderwidth=1)
+            warning_frame.pack(fill=tk.X, padx=20, pady=(10, 0))
+            
+            warning_label = tk.Label(
+                warning_frame,
+                text=self.config_warning,
+                font=("Arial", 9),
+                fg="#856404",
+                bg="#fff3cd",
+                wraplength=750,
+                justify=tk.LEFT
+            )
+            warning_label.pack(padx=10, pady=8)
+        
+        # Configuration Info Frame
+        config_frame = tk.Frame(self.root, bg="#e7f3ff", relief=tk.SOLID, borderwidth=1)
+        config_frame.pack(fill=tk.X, padx=20, pady=(5, 0))
+        
+        config_label = tk.Label(
+            config_frame,
+            text=f"📋 Konfigurasi: Apps Script URL = {'✅ Configured' if self.config['apps_script_url'] and 'YOUR_SCRIPT_ID_HERE' not in self.config['apps_script_url'] else '❌ Not Configured'} | "
+                 f"Sheet Name = {self.config['default_sheet_name']} | "
+                 f"Output Dir = {self.config['output_directory']}",
+            font=("Arial", 8),
+            fg="#004085",
+            bg="#e7f3ff",
+            anchor=tk.W
+        )
+        config_label.pack(padx=10, pady=5, fill=tk.X)
+        
+        # Create Notebook (Tabs)
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        # Tab 1: Scraping
+        self.scraping_tab = tk.Frame(self.notebook)
+        self.notebook.add(self.scraping_tab, text="📥 Scraping Dosen")
+        
+        # Tab 2: Upload to Sheets
+        self.upload_tab = tk.Frame(self.notebook)
+        self.notebook.add(self.upload_tab, text="📤 Upload ke Sheets")
+        
+        # Setup tabs
+        self._setup_scraping_tab()
+        self._setup_upload_tab()
+    
+    def _setup_scraping_tab(self):
+        """
+        Setup UI for Scraping tab.
+        """
         # Main Content Frame
-        main_frame = tk.Frame(self.root, padx=20, pady=10)
+        main_frame = tk.Frame(self.scraping_tab, padx=20, pady=10)
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # ===== Section 1: File Input =====
@@ -272,6 +364,189 @@ class GoogleScholarScraperGUI:
         )
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
     
+    def _setup_upload_tab(self):
+        """
+        Setup UI for Upload to Google Sheets tab.
+        """
+        # Main Content Frame
+        main_frame = tk.Frame(self.upload_tab, padx=20, pady=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # ===== Section 1: Excel File Selection =====
+        file_section = tk.LabelFrame(
+            main_frame,
+            text="📁 Pilih File Excel",
+            font=("Arial", 11, "bold"),
+            padx=15,
+            pady=15
+        )
+        file_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Info label
+        info_label = tk.Label(
+            file_section,
+            text="Pilih file Excel (.xlsx) hasil scraping yang akan diupload ke Google Sheets",
+            font=("Arial", 9),
+            fg="#555555",
+            anchor=tk.W
+        )
+        info_label.pack(fill=tk.X, pady=(0, 10))
+        
+        # File selection frame
+        file_frame = tk.Frame(file_section)
+        file_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(
+            file_frame,
+            text="File Excel:",
+            font=("Arial", 10),
+            width=12,
+            anchor=tk.W
+        ).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.excel_entry = tk.Entry(
+            file_frame,
+            textvariable=self.excel_file_path,
+            font=("Arial", 10),
+            width=40,
+            state="readonly"
+        )
+        self.excel_entry.pack(side=tk.LEFT, padx=(0, 10))
+        
+        browse_excel_btn = tk.Button(
+            file_frame,
+            text="📂 Browse",
+            command=self._browse_excel_file,
+            bg="#3498db",
+            fg="white",
+            font=("Arial", 9),
+            cursor="hand2",
+            relief=tk.FLAT,
+            padx=15
+        )
+        browse_excel_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Use last scraped button
+        use_last_btn = tk.Button(
+            file_frame,
+            text="⬅️ Gunakan Hasil Terakhir",
+            command=self._use_last_scraped_file,
+            bg="#95a5a6",
+            fg="white",
+            font=("Arial", 9),
+            cursor="hand2",
+            relief=tk.FLAT,
+            padx=10
+        )
+        use_last_btn.pack(side=tk.LEFT)
+        
+        # ===== Section 2: Google Sheets Configuration =====
+        sheets_section = tk.LabelFrame(
+            main_frame,
+            text="📊 Konfigurasi Google Sheets",
+            font=("Arial", 11, "bold"),
+            padx=15,
+            pady=15
+        )
+        sheets_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Spreadsheet URL
+        url_frame = tk.Frame(sheets_section)
+        url_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(
+            url_frame,
+            text="Spreadsheet URL:",
+            font=("Arial", 10),
+            width=15,
+            anchor=tk.W
+        ).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.spreadsheet_entry = tk.Entry(
+            url_frame,
+            textvariable=self.spreadsheet_url,
+            font=("Arial", 10),
+            width=50
+        )
+        self.spreadsheet_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Sheet Name
+        sheet_frame = tk.Frame(sheets_section)
+        sheet_frame.pack(fill=tk.X, pady=(10, 5))
+        
+        tk.Label(
+            sheet_frame,
+            text="Nama Sheet:",
+            font=("Arial", 10),
+            width=15,
+            anchor=tk.W
+        ).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.sheet_entry = tk.Entry(
+            sheet_frame,
+            textvariable=self.sheet_name,
+            font=("Arial", 10),
+            width=30
+        )
+        self.sheet_entry.pack(side=tk.LEFT)
+        self.sheet_name.set(self.config['default_sheet_name'])  # Set default
+        
+        tk.Label(
+            sheet_frame,
+            text="(akan dibuat jika belum ada)",
+            font=("Arial", 8),
+            fg="#666666"
+        ).pack(side=tk.LEFT, padx=(10, 0))
+        
+        # ===== Section 3: Upload Actions =====
+        action_section = tk.LabelFrame(
+            main_frame,
+            text="🚀 Upload",
+            font=("Arial", 11, "bold"),
+            padx=15,
+            pady=15
+        )
+        action_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Upload button
+        button_frame = tk.Frame(action_section)
+        button_frame.pack(pady=10)
+        
+        self.upload_btn = tk.Button(
+            button_frame,
+            text="📤 Upload ke Google Sheets",
+            command=self._start_upload,
+            bg="#27ae60",
+            fg="white",
+            font=("Arial", 12, "bold"),
+            cursor="hand2",
+            relief=tk.FLAT,
+            padx=30,
+            pady=10,
+            width=25
+        )
+        self.upload_btn.pack()
+        
+        # ===== Section 4: Upload Log =====
+        log_section = tk.LabelFrame(
+            main_frame,
+            text="📋 Log Upload",
+            font=("Arial", 11, "bold"),
+            padx=15,
+            pady=15
+        )
+        log_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        self.upload_log_text = scrolledtext.ScrolledText(
+            log_section,
+            wrap=tk.WORD,
+            height=12,
+            font=("Consolas", 9),
+            bg="#f8f9fa",
+            fg="#2c3e50"
+        )
+        self.upload_log_text.pack(fill=tk.BOTH, expand=True)
+    
     def _load_input_files(self):
         """
         Load available CSV and TXT files from the input folder.
@@ -318,7 +593,7 @@ class GoogleScholarScraperGUI:
     
     def log(self, message):
         """
-        Add message to log text area.
+        Add message to log text area (Scraping tab).
         
         Args:
             message (str): Message to log
@@ -326,7 +601,21 @@ class GoogleScholarScraperGUI:
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
         self.log_text.see(tk.END)
-        self.root.update_idletasks()
+        self.log_text.update()  # Force update immediately
+        self.root.update()  # Force window update
+    
+    def upload_log(self, message):
+        """
+        Add message to upload log text area (Upload tab).
+        
+        Args:
+            message (str): Message to log
+        """
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.upload_log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+        self.upload_log_text.see(tk.END)
+        self.upload_log_text.update()  # Force update immediately
+        self.root.update()  # Force window update
     
     def _update_status(self, message):
         """
@@ -337,6 +626,153 @@ class GoogleScholarScraperGUI:
         """
         self.status_bar.config(text=message)
         self.root.update_idletasks()
+    
+    def _browse_excel_file(self):
+        """
+        Open file browser to select Excel file for upload.
+        """
+        filename = filedialog.askopenfilename(
+            title="Pilih File Excel",
+            initialdir=self.config['output_directory'],
+            filetypes=[
+                ("Excel files", "*.xlsx"),
+                ("All files", "*.*")
+            ]
+        )
+        
+        if filename:
+            self.excel_file_path.set(filename)
+            self.upload_log(f"📁 File dipilih: {os.path.basename(filename)}")
+    
+    def _use_last_scraped_file(self):
+        """
+        Use the last scraped Excel file.
+        """
+        if self.last_scraped_file and os.path.exists(self.last_scraped_file):
+            self.excel_file_path.set(self.last_scraped_file)
+            self.upload_log(f"✅ Menggunakan file terakhir: {os.path.basename(self.last_scraped_file)}")
+        else:
+            messagebox.showwarning(
+                "Peringatan",
+                "Tidak ada file hasil scraping terakhir.\n"
+                "Silakan scraping terlebih dahulu atau pilih file secara manual."
+            )
+            self.upload_log("⚠️ Tidak ada file hasil scraping terakhir")
+    
+    def _start_upload(self):
+        """
+        Start the upload process in a separate thread.
+        """
+        # Validation
+        if not self.excel_file_path.get():
+            messagebox.showerror("Error", "Pilih file Excel terlebih dahulu!")
+            return
+        
+        if not os.path.exists(self.excel_file_path.get()):
+            messagebox.showerror("Error", f"File tidak ditemukan:\n{self.excel_file_path.get()}")
+            return
+        
+        if not self.spreadsheet_url.get():
+            messagebox.showerror("Error", "Masukkan URL Google Spreadsheet!")
+            return
+        
+        if not self.sheet_name.get():
+            messagebox.showerror("Error", "Masukkan nama sheet!")
+            return
+        
+        # Check if Apps Script URL configured
+        if not self.config['apps_script_url'] or 'YOUR_SCRIPT_ID_HERE' in self.config['apps_script_url']:
+            messagebox.showerror(
+                "Error",
+                "APPS_SCRIPT_URL belum dikonfigurasi!\n\n"
+                "Silakan:\n"
+                "1. Edit file .env\n"
+                "2. Isi APPS_SCRIPT_URL dengan URL Apps Script Anda\n"
+                "3. Restart aplikasi\n\n"
+                "Lihat dokumentasi di APPS_SCRIPT_SETUP.md"
+            )
+            return
+        
+        # Disable upload button
+        self.upload_btn.config(state=tk.DISABLED)
+        self.is_uploading = True
+        
+        # Clear log
+        self.upload_log_text.delete(1.0, tk.END)
+        
+        # Start upload in separate thread
+        thread = threading.Thread(target=self._run_upload, daemon=True)
+        thread.start()
+    
+    def _run_upload(self):
+        """
+        Main upload logic (runs in separate thread).
+        """
+        try:
+            self.upload_log("=" * 60)
+            self.upload_log("🚀 MEMULAI UPLOAD KE GOOGLE SHEETS")
+            self.upload_log("=" * 60)
+            
+            excel_file = self.excel_file_path.get()
+            spreadsheet_url = self.spreadsheet_url.get()
+            sheet_name = self.sheet_name.get()
+            
+            self.upload_log(f"📂 File: {os.path.basename(excel_file)}")
+            self.upload_log(f"📊 Target Sheet: {sheet_name}")
+            self.upload_log("")
+            
+            # Call transfer function
+            result = transfer_data_to_sheets(
+                excel_file_path=excel_file,
+                spreadsheet_url=spreadsheet_url,
+                sheet_name=sheet_name,
+                web_app_url=self.config['apps_script_url'],
+                status_callback=self.upload_log
+            )
+            
+            self.upload_log("")
+            self.upload_log("=" * 60)
+            self.upload_log("🎉 UPLOAD SELESAI!")
+            self.upload_log("=" * 60)
+            
+            messagebox.showinfo(
+                "Sukses",
+                f"Data berhasil diupload ke Google Sheets!\n\n"
+                f"Sheet: {sheet_name}\n"
+                f"Baris: {result.get('rowsWritten', 'N/A')}"
+            )
+            
+        except Exception as e:
+            error_msg = str(e)
+            self.upload_log(f"\n❌ ERROR: {error_msg}")
+            
+            # Detailed error message for 403 Forbidden
+            if "403" in error_msg or "Forbidden" in error_msg:
+                detailed_msg = (
+                    "Upload gagal dengan error 403 Forbidden.\n\n"
+                    "KEMUNGKINAN PENYEBAB:\n"
+                    "1. Apps Script belum di-deploy dengan benar\n"
+                    "2. Permission 'Who has access' tidak diset ke 'Anyone'\n\n"
+                    "CARA MEMPERBAIKI:\n"
+                    "1. Buka Apps Script di script.google.com\n"
+                    "2. Klik Deploy → Manage Deployments\n"
+                    "3. Edit deployment yang ada atau buat baru\n"
+                    "4. Set 'Execute as' = Me (email Anda)\n"
+                    "5. Set 'Who has access' = Anyone\n"
+                    "6. Klik Deploy dan copy URL baru\n"
+                    "7. Update APPS_SCRIPT_URL di file .env\n"
+                    "8. Restart aplikasi\n\n"
+                    f"Detail Error:\n{error_msg}\n\n"
+                    "Lihat dokumentasi lengkap di APPS_SCRIPT_SETUP.md"
+                )
+                messagebox.showerror("Error 403: Forbidden", detailed_msg)
+            else:
+                messagebox.showerror("Error", f"Upload gagal:\n\n{error_msg}")
+        
+        finally:
+            # Re-enable upload button
+            self.upload_btn.config(state=tk.NORMAL)
+            self.is_uploading = False
     
     def _start_scraping(self):
         """
@@ -455,11 +891,21 @@ class GoogleScholarScraperGUI:
             if output_format in ["excel", "both"]:
                 excel_path = save_to_excel(df_results, os.path.join(output_dir, f"{base_filename}.xlsx"))
                 self.log(f"      ✅ Excel: {os.path.basename(excel_path)}")
+                # Save last scraped file for upload tab
+                self.last_scraped_file = excel_path
+            elif output_format == "csv":
+                # If only CSV, still try to create Excel for upload
+                excel_path = save_to_excel(df_results, os.path.join(output_dir, f"{base_filename}.xlsx"))
+                self.last_scraped_file = excel_path
             
             self.log("\n" + "=" * 60)
             self.log("🎉 PROSES SELESAI!")
             self.log("=" * 60)
             self.log(f"📁 File tersimpan di folder: {output_dir}")
+            
+            # Notify about upload tab
+            if self.last_scraped_file:
+                self.log(f"\n💡 Tip: Gunakan tab 'Upload ke Sheets' untuk mengunggah hasil ke Google Sheets")
             
             self._update_status("Completed successfully!")
             

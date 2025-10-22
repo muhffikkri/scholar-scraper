@@ -104,6 +104,31 @@ def sanitize_filename(filename: str) -> str:
     return sanitized.strip('_')
 
 
+def extract_spreadsheet_id_from_url(url: str) -> str:
+    """
+    Mengekstrak Spreadsheet ID dari URL Google Sheets.
+    
+    Args:
+        url (str): URL Google Spreadsheet
+        
+    Returns:
+        str: Spreadsheet ID atau empty string jika tidak valid
+        
+    Examples:
+        >>> extract_spreadsheet_id_from_url("https://docs.google.com/spreadsheets/d/1ABC123XYZ/edit")
+        "1ABC123XYZ"
+    """
+    # Pattern untuk Google Sheets URL
+    # Format: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/...
+    pattern = r'/spreadsheets/d/([a-zA-Z0-9-_]+)'
+    
+    match = re.search(pattern, url)
+    if match:
+        return match.group(1)
+    
+    return ""
+
+
 def parse_publication_info(info_string: str) -> dict:
     """
     Melakukan parsing cerdas pada string informasi publikasi.
