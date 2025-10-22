@@ -126,15 +126,41 @@ Menghapus gelar akademis dari nama dosen secara otomatis:
 
 ## 📊 Kolom Data yang Di-scrape
 
-| Kolom      | Deskripsi                 |
-| ---------- | ------------------------- |
-| Nama Dosen | Nama dosen yang di-scrape |
-| Judul      | Judul publikasi           |
-| Penulis    | Daftar penulis            |
-| Venue      | Jurnal/konferensi         |
-| Tahun      | Tahun publikasi           |
-| Sitasi     | Jumlah sitasi             |
-| Publisher  | Penerbit (jika ada)       |
+| Kolom        | Deskripsi                                       |
+| ------------ | ----------------------------------------------- |
+| Nama Dosen   | Nama dosen yang di-scrape                       |
+| Judul        | Judul publikasi                                 |
+| Penulis      | Daftar penulis                                  |
+| Journal_Name | Nama jurnal/konferensi/buku                     |
+| Volume       | Volume jurnal (untuk artikel jurnal)            |
+| Issue        | Terbitan/Issue (untuk artikel jurnal)           |
+| Pages        | Halaman (untuk artikel jurnal)                  |
+| Publisher    | Nama penerbit (untuk buku/lainnya)              |
+| Tahun        | Tahun publikasi                                 |
+| Sitasi       | Jumlah sitasi                                   |
+| Link         | URL ke halaman detail artikel di Google Scholar |
+
+### Parsing Venue Otomatis
+
+Aplikasi akan secara otomatis memecah informasi venue menjadi kolom-kolom detail:
+
+**Untuk Artikel Jurnal:**
+
+- Pola: `Nama Jurnal Volume (Terbitan), Halaman`
+- Contoh: `IEEE Transactions on AI 15 (3), 45-60`
+- Hasil:
+  - `Journal_Name`: "IEEE Transactions on AI"
+  - `Volume`: "15"
+  - `Issue`: "3"
+  - `Pages`: "45-60"
+
+**Untuk Buku atau Lainnya:**
+
+- Pola: `Nama Penerbit`
+- Contoh: `Springer Nature, 2020`
+- Hasil:
+  - `Publisher`: "Springer Nature"
+  - `Tahun`: "2020"
 
 ## ⚠️ Catatan Penting
 

@@ -19,6 +19,7 @@ from selenium.common.exceptions import (
 )
 from bs4 import BeautifulSoup
 import pandas as pd
+from .utils import parse_publication_info, parse_venue_from_detail
 
 
 class GoogleScholarScraper:
@@ -253,7 +254,7 @@ class GoogleScholarScraper:
             publication_data = {
                 'Judul': title,
                 'Penulis': authors,
-                'Venue': venue_info,
+                'Venue_Raw': venue_info,  # Simpan venue mentah
                 'Tahun': year,
                 'Sitasi': citations,
                 'Detail_Link': detail_link,
@@ -313,12 +314,27 @@ class GoogleScholarScraper:
                         # Ambil detail
                         details = self._scrape_publication_detail(pub_data['Detail_Link'])
                         
-                        # Update data dengan detail
+                        # Parse venue dari detail
                         if details:
-                            pub_data['Venue'] = details.get('Jurnal', details.get('Konferensi', pub_data['Venue']))
-                            pub_data['Tahun'] = details.get('Tanggal publikasi', pub_data['Tahun'])
-                            pub_data['Penulis'] = details.get('Penulis', pub_data['Penulis'])
-                            pub_data['Publisher'] = details.get('Penerbit', '')
+                            venue_parsed = parse_venue_from_detail(details)
+                            pub_data['Journal_Name'] = venue_parsed['journal_name']
+                            pub_data['Volume'] = venue_parsed['volume']
+                            pub_data['Issue'] = venue_parsed['issue']
+                            pub_data['Pages'] = venue_parsed['pages']
+                            pub_data['Publisher'] = venue_parsed['publisher']
+                            
+                            # Update tahun dan penulis jika ada
+                            if venue_parsed['year']:
+                                pub_data['Tahun'] = venue_parsed['year']
+                            pub_data['Penulis'] = details.get('Penulis', details.get('Authors', pub_data['Penulis']))
+                        else:
+                            # Jika gagal scrape detail, parse dari venue_raw
+                            venue_parsed = parse_publication_info(pub_data['Venue_Raw'])
+                            pub_data['Journal_Name'] = venue_parsed['journal_name']
+                            pub_data['Volume'] = venue_parsed['volume']
+                            pub_data['Issue'] = venue_parsed['issue']
+                            pub_data['Pages'] = venue_parsed['pages']
+                            pub_data['Publisher'] = venue_parsed['publisher']
                         
                         # Kembali ke halaman profil
                         self.driver.get(profile_url)
@@ -329,13 +345,29 @@ class GoogleScholarScraper:
                         
                         # Refresh list baris publikasi
                         pub_rows = self.driver.find_elements(By.CLASS_NAME, "gsc_a_tr")
+                    else:
+                        # Data lengkap, parse langsung dari venue_raw
+                        venue_parsed = parse_publication_info(pub_data['Venue_Raw'])
+                        pub_data['Journal_Name'] = venue_parsed['journal_name']
+                        pub_data['Volume'] = venue_parsed['volume']
+                        pub_data['Issue'] = venue_parsed['issue']
+                        pub_data['Pages'] = venue_parsed['pages']
+                        pub_data['Publisher'] = venue_parsed['publisher']
+                        
+                        # Update tahun jika ditemukan di parsing
+                        if venue_parsed['year']:
+                            pub_data['Tahun'] = venue_parsed['year']
                     
                     # Tambahkan nama dosen
                     pub_data['Nama Dosen'] = nama_dosen
                     
-                    # Hapus flag is_incomplete
+                    # Simpan link detail sebagai kolom Link
+                    pub_data['Link'] = pub_data['Detail_Link']
+                    
+                    # Hapus flag is_incomplete dan data sementara
                     del pub_data['Is_Incomplete']
                     del pub_data['Detail_Link']
+                    del pub_data['Venue_Raw']
                     
                     # Tambahkan ke hasil
                     publications.append(pub_data)

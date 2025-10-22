@@ -81,6 +81,9 @@ def sanitize_filename(filename: str) -> str:
 def parse_publication_info(info_string: str) -> dict:
     """
     Melakukan parsing cerdas pada string informasi publikasi.
+    Memecah venue menjadi komponen detail berdasarkan pola:
+    - Jurnal: Nama Jurnal Volume (Terbitan), Halaman
+    - Buku/Lainnya: Nama Penerbit
     
     Args:
         info_string (str): String informasi publikasi dari Google Scholar
@@ -89,15 +92,19 @@ def parse_publication_info(info_string: str) -> dict:
         dict: Dictionary berisi komponen-komponen publikasi
         
     Examples:
-        >>> parse_publication_info("Journal of AI, 2020")
-        {'venue': 'Journal of AI', 'year': '2020'}
+        >>> parse_publication_info("IEEE Transactions on AI 15 (3), 45-60")
+        {'journal_name': 'IEEE Transactions on AI', 'volume': '15', 'issue': '3', 'pages': '45-60', 'publisher': '', 'year': ''}
+        
+        >>> parse_publication_info("Springer Nature, 2020")
+        {'journal_name': '', 'volume': '', 'issue': '', 'pages': '', 'publisher': 'Springer Nature', 'year': '2020'}
     """
     result = {
-        'venue': '',
-        'year': '',
+        'journal_name': '',
         'volume': '',
+        'issue': '',
         'pages': '',
-        'publisher': ''
+        'publisher': '',
+        'year': ''
     }
     
     if not info_string:
@@ -110,14 +117,106 @@ def parse_publication_info(info_string: str) -> dict:
         # Hapus tahun dari string untuk memudahkan parsing selanjutnya
         info_string = info_string.replace(year_match.group(0), '').strip()
     
-    # Split berdasarkan koma
-    parts = [p.strip() for p in info_string.split(',') if p.strip()]
+    # Hapus koma trailing atau leading
+    info_string = info_string.strip(',').strip()
     
-    if parts:
-        result['venue'] = parts[0]
+    # Pola 1: Artikel Jurnal dengan Volume dan Issue
+    # Contoh: "Journal Name 15 (3), 45-60" atau "Journal Name 15, 45-60"
+    journal_pattern = r'^(.+?)\s+(\d+)\s*(?:\((\d+)\))?\s*,\s*(.+)$'
+    match = re.match(journal_pattern, info_string)
+    
+    if match:
+        # Ini adalah artikel jurnal
+        result['journal_name'] = match.group(1).strip()
+        result['volume'] = match.group(2).strip()
+        result['issue'] = match.group(3).strip() if match.group(3) else ''
+        result['pages'] = match.group(4).strip()
+        return result
+    
+    # Pola 2: Artikel Jurnal tanpa halaman eksplisit
+    # Contoh: "Journal Name 15 (3)" atau "Journal Name 15"
+    journal_pattern_no_pages = r'^(.+?)\s+(\d+)\s*(?:\((\d+)\))?$'
+    match = re.match(journal_pattern_no_pages, info_string)
+    
+    if match:
+        result['journal_name'] = match.group(1).strip()
+        result['volume'] = match.group(2).strip()
+        result['issue'] = match.group(3).strip() if match.group(3) else ''
+        return result
+    
+    # Pola 3: Halaman tanpa volume (jarang tapi mungkin terjadi)
+    # Contoh: "Journal Name, 45-60"
+    journal_pattern_pages_only = r'^(.+?),\s*(\d+[-–]\d+)$'
+    match = re.match(journal_pattern_pages_only, info_string)
+    
+    if match:
+        result['journal_name'] = match.group(1).strip()
+        result['pages'] = match.group(2).strip()
+        return result
+    
+    # Jika tidak cocok dengan pola jurnal, anggap sebagai publisher/buku
+    # Bisa berupa penerbit, konferensi, atau informasi lainnya
+    if info_string:
+        result['publisher'] = info_string.strip()
+    
+    return result
+
+
+def parse_venue_from_detail(detail_dict: dict) -> dict:
+    """
+    Memparse venue dari dictionary detail publikasi yang di-scrape dari halaman detail.
+    
+    Args:
+        detail_dict (dict): Dictionary berisi detail publikasi dari halaman detail
         
-        # Coba identifikasi publisher atau informasi tambahan
-        if len(parts) > 1:
-            result['publisher'] = ', '.join(parts[1:])
+    Returns:
+        dict: Dictionary berisi komponen venue yang sudah dipecah
+    """
+    result = {
+        'journal_name': '',
+        'volume': '',
+        'issue': '',
+        'pages': '',
+        'publisher': '',
+        'year': ''
+    }
+    
+    # Ambil informasi dari berbagai field yang mungkin ada
+    journal = detail_dict.get('Jurnal', detail_dict.get('Journal', ''))
+    conference = detail_dict.get('Konferensi', detail_dict.get('Conference', ''))
+    book_title = detail_dict.get('Buku', detail_dict.get('Book', ''))
+    publisher = detail_dict.get('Penerbit', detail_dict.get('Publisher', ''))
+    volume = detail_dict.get('Volume', '')
+    issue = detail_dict.get('Terbitan', detail_dict.get('Issue', ''))
+    pages = detail_dict.get('Halaman', detail_dict.get('Pages', ''))
+    year = detail_dict.get('Tanggal publikasi', detail_dict.get('Publication date', ''))
+    
+    # Prioritaskan jurnal, lalu konferensi, lalu buku
+    if journal:
+        result['journal_name'] = journal
+    elif conference:
+        result['journal_name'] = conference
+    elif book_title:
+        result['journal_name'] = book_title
+    
+    # Isi volume, issue, pages jika ada
+    if volume:
+        result['volume'] = volume
+    if issue:
+        result['issue'] = issue
+    if pages:
+        result['pages'] = pages
+    
+    # Isi publisher
+    if publisher:
+        result['publisher'] = publisher
+    
+    # Ekstrak tahun dari tanggal publikasi
+    if year:
+        year_match = re.search(r'\b(19|20)\d{2}\b', year)
+        if year_match:
+            result['year'] = year_match.group(0)
+        else:
+            result['year'] = year
     
     return result
