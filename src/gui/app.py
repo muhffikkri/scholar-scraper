@@ -38,7 +38,7 @@ class GoogleScholarScraperGUI:
     def __init__(self, root):
         """
         Initialize the GUI application.
-        
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
         Args:
             root: Tkinter root window
         """
@@ -54,6 +54,10 @@ class GoogleScholarScraperGUI:
         self.output_format = tk.StringVar(value="excel")  # Default: Excel
         self.headless_mode = tk.BooleanVar(value=False)
         self.wait_time = tk.IntVar(value=10)
+        # Year selection for per-year cited_by counts
+        self.current_year = datetime.now().year
+        self.year_from = tk.IntVar(value=self.current_year - 3)
+        self.year_to = tk.IntVar(value=self.current_year)
         self.is_running = False
         self.last_scraped_file = None  # Track last scraped Excel file
         
@@ -343,6 +347,38 @@ class GoogleScholarScraperGUI:
             font=("Arial", 10)
         )
         wait_spinbox.pack(side=tk.LEFT)
+        
+        # Year range selection for cited_by per year
+        year_frame = tk.Frame(settings_section)
+        year_frame.pack(fill=tk.X, pady=5)
+
+        tk.Label(
+            year_frame,
+            text="Cited-by per tahun (From - To):",
+            font=("Arial", 10)
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
+        year_from_spin = tk.Spinbox(
+            year_frame,
+            from_=1900,
+            to=self.current_year,
+            textvariable=self.year_from,
+            width=8,
+            font=("Arial", 10)
+        )
+        year_from_spin.pack(side=tk.LEFT)
+
+        tk.Label(year_frame, text=" - ", font=("Arial", 10)).pack(side=tk.LEFT, padx=5)
+
+        year_to_spin = tk.Spinbox(
+            year_frame,
+            from_=1900,
+            to=self.current_year,
+            textvariable=self.year_to,
+            width=8,
+            font=("Arial", 10)
+        )
+        year_to_spin.pack(side=tk.LEFT)
         
         # ===== Section 4: Control Buttons =====
         button_frame = tk.Frame(main_frame, pady=10)
@@ -934,12 +970,22 @@ class GoogleScholarScraperGUI:
             self.log(f"      Mode: {'Headless' if self.headless_mode.get() else 'Browser Visible'}")
             self.log(f"      Timeout: {self.wait_time.get()} detik")
             
+            # Prepare year list if valid range is selected
+            year_start = self.year_from.get()
+            year_end = self.year_to.get()
+            if year_start <= year_end:
+                years_list = list(range(year_start, year_end + 1))
+                self.log(f"      Cited-by per tahun: {year_start} - {year_end}")
+            else:
+                years_list = None
+                self.log(f"      Cited-by per tahun: semua (range tidak valid)")
+            
             scraper = GoogleScholarScraper(
                 headless=self.headless_mode.get(),
                 wait_time=self.wait_time.get()
             )
             
-            df_results = scraper.run_scraper(dosen_names_clean)
+            df_results = scraper.run_scraper(dosen_names_clean, years=years_list)
             
             if not self.is_running:
                 return

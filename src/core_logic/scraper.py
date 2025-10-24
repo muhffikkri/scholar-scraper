@@ -164,16 +164,35 @@ class GoogleScholarScraper:
     def _scrape_publication_detail(self, detail_url: str) -> Dict[str, str]:
         """
         Scrape detail publikasi dari halaman detail artikel.
+        Mengambil data langsung dari field terstruktur di gsc_oci_table.
         
         Args:
-            detail_url (str): URL halaman detail artikel
+            detail_url (str): URL halaman detail artikel (untuk fallback)
             
         Returns:
             Dict[str, str]: Dictionary berisi detail publikasi
         """
         try:
+            # NOTE: Sebaiknya menggunakan klik pada elemen, bukan navigasi langsung
+            # Tapi karena kita sudah kembali ke profil, kita perlu navigasi ulang
             self.driver.get(detail_url)
             time.sleep(1.5)
+            
+            return self._scrape_publication_detail_from_current_page()
+            
+        except Exception as e:
+            print(f"Error saat scraping detail: {e}")
+            return {}
+    
+    def _scrape_publication_detail_from_current_page(self) -> Dict[str, str]:
+        """
+        Scrape detail publikasi dari halaman yang SUDAH DIBUKA.
+        Mengambil data langsung dari field terstruktur di gsc_oci_table.
+        
+        Returns:
+            Dict[str, str]: Dictionary berisi detail publikasi
+        """
+        try:
             
             # Tunggu tabel detail muncul
             wait = WebDriverWait(self.driver, self.wait_time)
@@ -183,7 +202,7 @@ class GoogleScholarScraper:
             
             # Parse dengan BeautifulSoup
             soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            detail_table = soup.find('table', {'id': 'gsc_oci_table'})
+            detail_table = soup.find('div', {'id': 'gsc_oci_table'})
             
             details = {}
             if detail_table:
@@ -195,7 +214,67 @@ class GoogleScholarScraper:
                     if field and value:
                         field_text = field.get_text(strip=True)
                         value_text = value.get_text(strip=True)
-                        details[field_text] = value_text
+                        
+                        # Map field names (Indonesian) ke key yang digunakan
+                        field_mapping = {
+                            'Pengarang': 'Authors',
+                            'Penulis': 'Authors',
+                            'Tanggal terbit': 'Publication_Date',
+                            'Jurnal': 'Journal',
+                            'Jilid': 'Volume',
+                            'Terbitan': 'Issue',
+                            'Halaman': 'Pages',
+                            'Penerbit': 'Publisher',
+                            'Deskripsi': 'Description',
+                            'Total kutipan': 'Total_Citations'
+                        }
+                        
+                        # Gunakan mapped key jika ada, otherwise gunakan original
+                        key = field_mapping.get(field_text, field_text)
+                        details[key] = value_text
+
+            # Parse cited-by per year dari grafik
+            # Ambil dari <div id="gsc_oci_graph_bars">
+            # Struktur: <span class="gsc_oci_g_t">tahun</span> untuk label tahun
+            #           <span class="gsc_oci_g_al">angka</span> untuk jumlah sitasi
+            cited_by_per_year = {}
+            graph_bars = soup.find('div', id='gsc_oci_graph_bars')
+            if graph_bars:
+                # Ambil semua tahun
+                year_spans = graph_bars.find_all('span', class_='gsc_oci_g_t')
+                years = [span.get_text(strip=True) for span in year_spans]
+                
+                # Ambil semua anchor dengan class gsc_oci_g_a yang berisi angka sitasi
+                citation_anchors = graph_bars.find_all('a', class_='gsc_oci_g_a')
+                counts = []
+                for anchor in citation_anchors:
+                    count_span = anchor.find('span', class_='gsc_oci_g_al')
+                    if count_span:
+                        txt = count_span.get_text(strip=True)
+                        try:
+                            # Clean dan convert ke integer
+                            count_value = int(txt.replace('\xa0', '').replace(',', '').replace('.', ''))
+                            counts.append(count_value)
+                        except Exception:
+                            # Fallback: extract hanya angka
+                            try:
+                                count_value = int(re.sub(r'[^0-9]', '', txt) or '0')
+                                counts.append(count_value)
+                            except Exception:
+                                counts.append(0)
+                
+                # Pasangkan tahun dengan jumlah sitasi
+                # Asumsi: jumlah tahun = jumlah counts (seharusnya selalu sama)
+                for i, year_str in enumerate(years):
+                    try:
+                        year_int = int(year_str)
+                        count = counts[i] if i < len(counts) else 0
+                        cited_by_per_year[year_int] = count
+                    except (ValueError, IndexError):
+                        # Skip jika tahun tidak valid atau index out of range
+                        continue
+
+            details['Cited_By_Per_Year'] = cited_by_per_year
             
             return details
             
@@ -270,6 +349,7 @@ class GoogleScholarScraper:
     def scrape_dosen_publications(self, nama_dosen: str) -> List[Dict[str, str]]:
         """
         Scrape semua publikasi untuk satu dosen.
+        Strategi: Scrape artikel yang sudah dimuat di layar, baru tekan tombol "Tampilkan lainnya".
         
         Args:
             nama_dosen (str): Nama dosen yang sudah dibersihkan
@@ -294,102 +374,171 @@ class GoogleScholarScraper:
             
             print(f"Memproses profil: {nama_dosen}")
             
-            # Load semua publikasi
-            self._load_all_publications()
+            # Loop untuk scraping batch per batch
+            batch_number = 1
+            has_more = True
             
-            # Dapatkan semua baris publikasi
-            pub_rows = self.driver.find_elements(By.CLASS_NAME, "gsc_a_tr")
-            
-            for idx, row in enumerate(pub_rows):
-                try:
-                    pub_data = self._parse_publication_row(row, scraped_titles)
-                    
-                    if not pub_data:
-                        continue
-                    
-                    # Jika data tidak lengkap, ambil detail
-                    if pub_data['Is_Incomplete'] and pub_data['Detail_Link']:
-                        print(f"  Mengambil detail untuk: {pub_data['Judul'][:50]}...")
+            while has_more:
+                print(f"\n  === Batch {batch_number} ===")
+                
+                # Dapatkan semua baris publikasi yang saat ini dimuat di layar
+                pub_rows = self.driver.find_elements(By.CLASS_NAME, "gsc_a_tr")
+                current_row_count = len(pub_rows)
+                print(f"  Total artikel di layar: {current_row_count}")
+                
+                # Scrape semua artikel yang ada di layar
+                for idx, row in enumerate(pub_rows):
+                    try:
+                        pub_data = self._parse_publication_row(row, scraped_titles)
                         
-                        # Ambil detail
-                        details = self._scrape_publication_detail(pub_data['Detail_Link'])
+                        if not pub_data:
+                            continue
                         
-                        # Parse venue dari detail
-                        if details:
-                            venue_parsed = parse_venue_from_detail(details)
-                            pub_data['Journal_Name'] = venue_parsed['journal_name']
-                            pub_data['Volume'] = venue_parsed['volume']
-                            pub_data['Issue'] = venue_parsed['issue']
-                            pub_data['Pages'] = venue_parsed['pages']
-                            pub_data['Publisher'] = venue_parsed['publisher']
+                        # SELALU masuk ke halaman detail untuk setiap artikel
+                        # Strategi: Klik link artikel di halaman profil
+                        try:
+                            print(f"  [{idx+1}/{current_row_count}] Mengambil detail: {pub_data['Judul'][:50]}...")
                             
-                            # Update tahun dan penulis jika ada
-                            if venue_parsed['year']:
-                                pub_data['Tahun'] = venue_parsed['year']
-                            pub_data['Penulis'] = details.get('Penulis', details.get('Authors', pub_data['Penulis']))
-                        else:
-                            # Jika gagal scrape detail, parse dari venue_raw
+                            # Cari link artikel dengan class gsc_a_at di row ini
+                            # Re-find row element untuk menghindari stale reference
+                            current_rows = self.driver.find_elements(By.CLASS_NAME, "gsc_a_tr")
+                            if idx < len(current_rows):
+                                current_row = current_rows[idx]
+                                
+                                # Cari dan klik link judul artikel
+                                article_link = current_row.find_element(By.CLASS_NAME, "gsc_a_at")
+                                
+                                # Scroll ke elemen agar terlihat
+                                self.driver.execute_script("arguments[0].scrollIntoView(true);", article_link)
+                                time.sleep(0.3)
+                                
+                                # Klik link artikel
+                                article_link.click()
+                                time.sleep(1.5)
+                                
+                                # Sekarang kita ada di halaman detail, scrape datanya
+                                details = self._scrape_publication_detail_from_current_page()
+                                
+                                # Jika ada detail, ambil langsung dari field terstruktur
+                                if details:
+                                    # Ambil data dari field yang sudah di-map
+                                    pub_data['Journal_Name'] = details.get('Journal', '')
+                                    pub_data['Volume'] = details.get('Volume', '')
+                                    pub_data['Issue'] = details.get('Issue', '')
+                                    pub_data['Pages'] = details.get('Pages', '')
+                                    pub_data['Publisher'] = details.get('Publisher', '')
+                                    
+                                    # Update penulis dari field Authors jika ada
+                                    if details.get('Authors'):
+                                        pub_data['Penulis'] = details.get('Authors')
+                                    
+                                    # Extract tahun dari Publication_Date jika ada (format: 2014/7/1)
+                                    if details.get('Publication_Date'):
+                                        try:
+                                            pub_date = details.get('Publication_Date')
+                                            year_from_date = pub_date.split('/')[0] if '/' in pub_date else pub_date.split('-')[0]
+                                            if year_from_date.isdigit():
+                                                pub_data['Tahun'] = year_from_date
+                                        except Exception:
+                                            pass
+                                    
+                                    # Simpan cited_by per year (PRIORITAS UTAMA)
+                                    cited_map = details.get('Cited_By_Per_Year', {})
+                                    pub_data['Cited_By_Per_Year'] = cited_map
+                                else:
+                                    # Jika gagal scrape detail, parse dari venue_raw
+                                    venue_parsed = parse_publication_info(pub_data['Venue_Raw'])
+                                    pub_data['Journal_Name'] = venue_parsed['journal_name']
+                                    pub_data['Volume'] = venue_parsed['volume']
+                                    pub_data['Issue'] = venue_parsed['issue']
+                                    pub_data['Pages'] = venue_parsed['pages']
+                                    pub_data['Publisher'] = venue_parsed['publisher']
+                                    pub_data['Cited_By_Per_Year'] = {}
+                                
+                                # Kembali ke halaman profil
+                                self.driver.back()
+                                time.sleep(1)
+                            else:
+                                raise Exception("Row index out of range")
+
+                        except Exception as e:
+                            print(f"    ⚠️  Gagal mengambil detail: {e}")
+                            # Fallback: parse dari venue_raw dan set cited_by kosong
                             venue_parsed = parse_publication_info(pub_data['Venue_Raw'])
                             pub_data['Journal_Name'] = venue_parsed['journal_name']
                             pub_data['Volume'] = venue_parsed['volume']
                             pub_data['Issue'] = venue_parsed['issue']
                             pub_data['Pages'] = venue_parsed['pages']
                             pub_data['Publisher'] = venue_parsed['publisher']
+                            pub_data['Cited_By_Per_Year'] = {}
+                            
+                            # Pastikan kembali ke profil jika error terjadi setelah klik
+                            try:
+                                if "citations" in self.driver.current_url and "view_op=view_citation" in self.driver.current_url:
+                                    self.driver.back()
+                                    time.sleep(1)
+                            except Exception:
+                                pass
                         
-                        # Kembali ke halaman profil
-                        self.driver.get(profile_url)
-                        time.sleep(1)
+                        # Tambahkan nama dosen
+                        pub_data['Nama Dosen'] = nama_dosen
                         
-                        # Muat ulang semua publikasi
-                        self._load_all_publications()
+                        # Simpan link detail sebagai kolom Link
+                        pub_data['Link'] = pub_data['Detail_Link']
                         
-                        # Refresh list baris publikasi
-                        pub_rows = self.driver.find_elements(By.CLASS_NAME, "gsc_a_tr")
+                        # Hapus flag is_incomplete dan data sementara
+                        del pub_data['Is_Incomplete']
+                        del pub_data['Detail_Link']
+                        del pub_data['Venue_Raw']
+                        
+                        # Tambahkan ke hasil
+                        publications.append(pub_data)
+                        scraped_titles.add(pub_data['Judul'])
+                        
+                    except StaleElementReferenceException:
+                        # Element sudah tidak valid, skip
+                        continue
+                    except Exception as e:
+                        print(f"    ⚠️  Error pada publikasi {idx+1}: {e}")
+                        continue
+                
+                print(f"  ✅ Batch {batch_number} selesai: {len(publications)} total publikasi")
+                
+                # Coba tekan tombol "Tampilkan lainnya" untuk load batch berikutnya
+                try:
+                    show_more_button = WebDriverWait(self.driver, 3).until(
+                        EC.presence_of_element_located((By.ID, "gsc_bpf_more"))
+                    )
+                    
+                    # Periksa apakah tombol disabled
+                    if show_more_button.get_attribute("disabled"):
+                        print(f"  ℹ️  Tidak ada artikel lagi (tombol disabled)")
+                        has_more = False
                     else:
-                        # Data lengkap, parse langsung dari venue_raw
-                        venue_parsed = parse_publication_info(pub_data['Venue_Raw'])
-                        pub_data['Journal_Name'] = venue_parsed['journal_name']
-                        pub_data['Volume'] = venue_parsed['volume']
-                        pub_data['Issue'] = venue_parsed['issue']
-                        pub_data['Pages'] = venue_parsed['pages']
-                        pub_data['Publisher'] = venue_parsed['publisher']
+                        # Scroll ke tombol dan klik
+                        self.driver.execute_script("arguments[0].scrollIntoView(true);", show_more_button)
+                        time.sleep(0.5)
+                        show_more_button.click()
+                        print(f"  ⏬ Memuat batch berikutnya...")
+                        time.sleep(1.5)
+                        batch_number += 1
                         
-                        # Update tahun jika ditemukan di parsing
-                        if venue_parsed['year']:
-                            pub_data['Tahun'] = venue_parsed['year']
-                    
-                    # Tambahkan nama dosen
-                    pub_data['Nama Dosen'] = nama_dosen
-                    
-                    # Simpan link detail sebagai kolom Link
-                    pub_data['Link'] = pub_data['Detail_Link']
-                    
-                    # Hapus flag is_incomplete dan data sementara
-                    del pub_data['Is_Incomplete']
-                    del pub_data['Detail_Link']
-                    del pub_data['Venue_Raw']
-                    
-                    # Tambahkan ke hasil
-                    publications.append(pub_data)
-                    scraped_titles.add(pub_data['Judul'])
-                    
-                    print(f"  [{idx+1}/{len(pub_rows)}] {pub_data['Judul'][:60]}...")
-                    
-                except StaleElementReferenceException:
-                    # Element sudah tidak valid, skip
-                    continue
+                except TimeoutException:
+                    # Tidak ada tombol lagi, semua publikasi sudah dimuat
+                    print(f"  ℹ️  Tidak ada tombol 'Tampilkan lainnya'")
+                    has_more = False
                 except Exception as e:
-                    print(f"  Error pada publikasi {idx+1}: {e}")
-                    continue
+                    print(f"  ⚠️  Error saat mencari tombol: {e}")
+                    has_more = False
             
-            print(f"Selesai: {nama_dosen} - {len(publications)} publikasi")
+            print(f"\n✅ Selesai: {nama_dosen} - {len(publications)} publikasi total")
             
         except Exception as e:
-            print(f"Error saat scraping {nama_dosen}: {e}")
+            print(f"❌ Error saat scraping {nama_dosen}: {e}")
         
         return publications
     
-    def run_scraper(self, dosen_list: List[str]) -> pd.DataFrame:
+    def run_scraper(self, dosen_list: List[str], years: Optional[List[int]] = None) -> pd.DataFrame:
         """
         Menjalankan scraper untuk list nama dosen.
         
@@ -400,6 +549,8 @@ class GoogleScholarScraper:
             pd.DataFrame: DataFrame berisi semua publikasi
         """
         all_publications = []
+        # store requested years (set) to filter output columns later
+        self.years_to_collect = set(years) if years else None
         
         try:
             # Inisialisasi driver
@@ -422,5 +573,23 @@ class GoogleScholarScraper:
         
         # Konversi ke DataFrame
         df = pd.DataFrame(all_publications)
-        
+
+        # Jika ada data Cited_By_Per_Year, expand menjadi kolom terpisah
+        if 'Cited_By_Per_Year' in df.columns:
+            # determine years to output
+            if self.years_to_collect:
+                years_out = sorted(self.years_to_collect)
+            else:
+                # union of all years present
+                years_union = set()
+                for m in df['Cited_By_Per_Year'].dropna().tolist():
+                    if isinstance(m, dict):
+                        years_union.update(m.keys())
+                years_out = sorted(years_union)
+
+            # create columns like 2025_cited_by
+            for y in years_out:
+                col = f"{y}_cited_by"
+                df[col] = df['Cited_By_Per_Year'].apply(lambda m, y=y: int(m.get(y, 0)) if isinstance(m, dict) else 0)
+
         return df
