@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import os
 import sys
+import json
 import threading
 from datetime import datetime
 from dotenv import load_dotenv
@@ -38,7 +39,7 @@ class GoogleScholarScraperGUI:
     def __init__(self, root):
         """
         Initialize the GUI application.
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+
         Args:
             root: Tkinter root window
         """
@@ -54,6 +55,7 @@ class GoogleScholarScraperGUI:
         self.output_format = tk.StringVar(value="excel")  # Default: Excel
         self.headless_mode = tk.BooleanVar(value=False)
         self.wait_time = tk.IntVar(value=10)
+        self.captcha_wait_time = tk.IntVar(value=5)  # CAPTCHA wait time in minutes
         # Year selection for per-year cited_by counts
         self.current_year = datetime.now().year
         self.year_from = tk.IntVar(value=self.current_year - 3)
@@ -143,13 +145,23 @@ class GoogleScholarScraperGUI:
         self.scraping_tab = tk.Frame(self.notebook)
         self.notebook.add(self.scraping_tab, text="📥 Scraping Dosen")
         
-        # Tab 2: Upload to Sheets
+        # Tab 2: Real-time Log
+        self.realtime_log_tab = tk.Frame(self.notebook)
+        self.notebook.add(self.realtime_log_tab, text="📝 Log Aktivitas")
+        
+        # Tab 3: Upload to Sheets
         self.upload_tab = tk.Frame(self.notebook)
         self.notebook.add(self.upload_tab, text="📤 Upload ke Sheets")
         
+        # Tab 4: Logs History
+        self.logs_tab = tk.Frame(self.notebook)
+        self.notebook.add(self.logs_tab, text="📋 Riwayat")
+        
         # Setup tabs
         self._setup_scraping_tab()
+        self._setup_realtime_log_tab()
         self._setup_upload_tab()
+        self._setup_logs_tab()
     
     def _setup_scraping_tab(self):
         """
@@ -348,6 +360,33 @@ class GoogleScholarScraperGUI:
         )
         wait_spinbox.pack(side=tk.LEFT)
         
+        # CAPTCHA wait time
+        captcha_wait_frame = tk.Frame(settings_section)
+        captcha_wait_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(
+            captcha_wait_frame,
+            text="CAPTCHA Timeout (menit):",
+            font=("Arial", 10)
+        ).pack(side=tk.LEFT, padx=(0, 10))
+        
+        captcha_wait_spinbox = tk.Spinbox(
+            captcha_wait_frame,
+            from_=1,
+            to=15,
+            textvariable=self.captcha_wait_time,
+            width=10,
+            font=("Arial", 10)
+        )
+        captcha_wait_spinbox.pack(side=tk.LEFT)
+        
+        tk.Label(
+            captcha_wait_frame,
+            text="(Waktu tunggu untuk solve CAPTCHA manual)",
+            font=("Arial", 9),
+            fg="gray"
+        ).pack(side=tk.LEFT, padx=10)
+        
         # Year range selection for cited_by per year
         year_frame = tk.Frame(settings_section)
         year_frame.pack(fill=tk.X, pady=5)
@@ -412,21 +451,61 @@ class GoogleScholarScraperGUI:
             state=tk.DISABLED
         )
         self.stop_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
+    
+    def _setup_realtime_log_tab(self):
+        """
+        Setup UI for Real-time Log tab.
+        """
+        # Main Content Frame
+        main_frame = tk.Frame(self.realtime_log_tab, padx=20, pady=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # ===== Section 5: Log Output =====
+        # Info Section
+        info_frame = tk.Frame(main_frame, bg="#d1ecf1", relief=tk.FLAT, borderwidth=1)
+        info_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        info_label = tk.Label(
+            info_frame,
+            text="📝 Log aktivitas scraping real-time. Tab ini akan otomatis terbuka saat scraping dimulai.",
+            font=("Arial", 9),
+            fg="#0c5460",
+            bg="#d1ecf1",
+            anchor=tk.W,
+            padx=10,
+            pady=8
+        )
+        info_label.pack(fill=tk.X)
+        
+        # Toolbar
+        toolbar = tk.Frame(main_frame)
+        toolbar.pack(fill=tk.X, pady=(0, 10))
+        
+        clear_btn = tk.Button(
+            toolbar,
+            text="🗑️ Clear Log",
+            command=self._clear_log,
+            bg="#e74c3c",
+            fg="white",
+            font=("Arial", 9),
+            cursor="hand2",
+            relief=tk.FLAT,
+            padx=15
+        )
+        clear_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Log Text Area
         log_section = tk.LabelFrame(
             main_frame,
-            text="📋 Log Aktivitas",
+            text="📋 Log Output",
             font=("Arial", 11, "bold"),
             padx=15,
             pady=15
         )
-        log_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        log_section.pack(fill=tk.BOTH, expand=True)
         
         self.log_text = scrolledtext.ScrolledText(
             log_section,
             wrap=tk.WORD,
-            height=12,
             font=("Consolas", 9),
             bg="#f8f9fa",
             fg="#2c3e50"
@@ -627,6 +706,125 @@ class GoogleScholarScraperGUI:
         )
         self.upload_log_text.pack(fill=tk.BOTH, expand=True)
     
+    def _setup_logs_tab(self):
+        """
+        Setup UI for Logs tab.
+        """
+        # Main Content Frame
+        main_frame = tk.Frame(self.logs_tab, padx=20, pady=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # ===== Section 1: Session List =====
+        sessions_section = tk.LabelFrame(
+            main_frame,
+            text="📂 Riwayat Scraping Sessions",
+            font=("Arial", 11, "bold"),
+            padx=15,
+            pady=15
+        )
+        sessions_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Toolbar
+        toolbar = tk.Frame(sessions_section)
+        toolbar.pack(fill=tk.X, pady=(0, 10))
+        
+        refresh_btn = tk.Button(
+            toolbar,
+            text="🔄 Refresh",
+            command=self._refresh_logs,
+            bg="#3498db",
+            fg="white",
+            font=("Arial", 9),
+            cursor="hand2",
+            relief=tk.FLAT,
+            padx=15
+        )
+        refresh_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        open_folder_btn = tk.Button(
+            toolbar,
+            text="📁 Buka Folder Logs",
+            command=self._open_logs_folder,
+            bg="#95a5a6",
+            fg="white",
+            font=("Arial", 9),
+            cursor="hand2",
+            relief=tk.FLAT,
+            padx=15
+        )
+        open_folder_btn.pack(side=tk.LEFT)
+        
+        # Create Treeview for sessions
+        tree_frame = tk.Frame(sessions_section)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbars
+        tree_scroll_y = tk.Scrollbar(tree_frame)
+        tree_scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        tree_scroll_x = tk.Scrollbar(tree_frame, orient=tk.HORIZONTAL)
+        tree_scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Treeview
+        self.sessions_tree = ttk.Treeview(
+            tree_frame,
+            columns=("session_id", "start_time", "duration", "total", "success", "failed", "captcha", "rate"),
+            show="headings",
+            yscrollcommand=tree_scroll_y.set,
+            xscrollcommand=tree_scroll_x.set,
+            height=15
+        )
+        
+        tree_scroll_y.config(command=self.sessions_tree.yview)
+        tree_scroll_x.config(command=self.sessions_tree.xview)
+        
+        # Define columns
+        self.sessions_tree.heading("session_id", text="Session ID")
+        self.sessions_tree.heading("start_time", text="Waktu Mulai")
+        self.sessions_tree.heading("duration", text="Durasi")
+        self.sessions_tree.heading("total", text="Total")
+        self.sessions_tree.heading("success", text="✅ Success")
+        self.sessions_tree.heading("failed", text="❌ Failed")
+        self.sessions_tree.heading("captcha", text="🤖 CAPTCHA")
+        self.sessions_tree.heading("rate", text="Success Rate")
+        
+        self.sessions_tree.column("session_id", width=150)
+        self.sessions_tree.column("start_time", width=150)
+        self.sessions_tree.column("duration", width=100)
+        self.sessions_tree.column("total", width=60)
+        self.sessions_tree.column("success", width=80)
+        self.sessions_tree.column("failed", width=80)
+        self.sessions_tree.column("captcha", width=80)
+        self.sessions_tree.column("rate", width=100)
+        
+        self.sessions_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Bind double-click event
+        self.sessions_tree.bind("<Double-1>", self._on_session_double_click)
+        
+        # ===== Section 2: Session Details =====
+        details_section = tk.LabelFrame(
+            main_frame,
+            text="📋 Detail Session",
+            font=("Arial", 11, "bold"),
+            padx=15,
+            pady=15
+        )
+        details_section.pack(fill=tk.X, pady=(0, 10))
+        
+        self.session_details_text = scrolledtext.ScrolledText(
+            details_section,
+            wrap=tk.WORD,
+            height=8,
+            font=("Consolas", 9),
+            bg="#f8f9fa",
+            fg="#2c3e50"
+        )
+        self.session_details_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Initial load
+        self._refresh_logs()
+    
     def _load_input_files(self):
         """
         Load available CSV and TXT files from the input folder.
@@ -690,7 +888,7 @@ class GoogleScholarScraperGUI:
     
     def log(self, message):
         """
-        Add message to log text area (Scraping tab).
+        Add message to log text area (Real-time Log tab).
         
         Args:
             message (str): Message to log
@@ -700,6 +898,14 @@ class GoogleScholarScraperGUI:
         self.log_text.see(tk.END)
         self.log_text.update()  # Force update immediately
         self.root.update()  # Force window update
+    
+    def _clear_log(self):
+        """
+        Clear the real-time log text area.
+        """
+        self.log_text.delete(1.0, tk.END)
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.log_text.insert(tk.END, f"[{timestamp}] 🗑️ Log cleared\n")
     
     def upload_log(self, message):
         """
@@ -755,6 +961,163 @@ class GoogleScholarScraperGUI:
                 "Silakan scraping terlebih dahulu atau pilih file secara manual."
             )
             self.upload_log("⚠️ Tidak ada file hasil scraping terakhir")
+    
+    def _refresh_logs(self):
+        """
+        Refresh the logs list from logging folder.
+        """
+        from src.core_logic.logger import get_all_sessions
+        
+        # Clear existing items
+        for item in self.sessions_tree.get_children():
+            self.sessions_tree.delete(item)
+        
+        # Get all sessions
+        sessions = get_all_sessions("logging")
+        
+        if not sessions:
+            self.session_details_text.delete(1.0, tk.END)
+            self.session_details_text.insert(1.0, "Tidak ada riwayat scraping.\n\nSilakan jalankan scraping untuk membuat log.")
+            return
+        
+        # Populate tree
+        for session in sessions:
+            session_info = session.get('session_info', {})
+            stats = session.get('statistics', {})
+            
+            session_id = session_info.get('session_id', 'N/A')
+            start_time = session_info.get('start_time', 'N/A')
+            duration = f"{session_info.get('duration_seconds', 0):.1f}s"
+            total = stats.get('total_dosen', 0)
+            success = stats.get('success_count', 0)
+            failed = stats.get('failed_count', 0)
+            captcha = stats.get('captcha_count', 0)
+            success_rate = stats.get('success_rate', '0%')
+            
+            self.sessions_tree.insert("", tk.END, values=(
+                session_id, start_time, duration, total, success, failed, captcha, success_rate
+            ), tags=(session.get('log_folder', ''),))
+        
+        self.session_details_text.delete(1.0, tk.END)
+        self.session_details_text.insert(1.0, f"📊 Total {len(sessions)} session(s) ditemukan.\n\nDouble-click pada session untuk melihat detail.")
+    
+    def _on_session_double_click(self, event):
+        """
+        Handle double-click on session item.
+        """
+        selection = self.sessions_tree.selection()
+        if not selection:
+            return
+        
+        # Get log folder from tags
+        item = selection[0]
+        tags = self.sessions_tree.item(item, "tags")
+        if not tags:
+            return
+        
+        log_folder = tags[0]
+        
+        # Read summary file
+        summary_file = None
+        if os.path.exists(log_folder):
+            for file in os.listdir(log_folder):
+                if file.startswith("summary_") and file.endswith(".json"):
+                    summary_file = os.path.join(log_folder, file)
+                    break
+        
+        if not summary_file or not os.path.exists(summary_file):
+            self.session_details_text.delete(1.0, tk.END)
+            self.session_details_text.insert(1.0, "❌ File summary tidak ditemukan.")
+            return
+        
+        # Load and display summary
+        try:
+            with open(summary_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Format details
+            details = f"{'='*60}\n"
+            details += f"SESSION DETAILS\n"
+            details += f"{'='*60}\n\n"
+            
+            session_info = data.get('session_info', {})
+            details += f"📌 Session ID: {session_info.get('session_id', 'N/A')}\n"
+            details += f"🕐 Start: {session_info.get('start_time', 'N/A')}\n"
+            details += f"🕑 End: {session_info.get('end_time', 'N/A')}\n"
+            details += f"⏱️  Duration: {session_info.get('duration_seconds', 0):.2f} seconds\n"
+            details += f"📁 Folder: {log_folder}\n\n"
+            
+            stats = data.get('statistics', {})
+            details += f"{'='*60}\n"
+            details += f"STATISTICS\n"
+            details += f"{'='*60}\n\n"
+            details += f"Total Dosen: {stats.get('total_dosen', 0)}\n"
+            details += f"✅ Success: {stats.get('success_count', 0)}\n"
+            details += f"❌ Failed: {stats.get('failed_count', 0)}\n"
+            details += f"🤖 CAPTCHA: {stats.get('captcha_count', 0)}\n"
+            details += f"📊 Success Rate: {stats.get('success_rate', '0%')}\n\n"
+            
+            # Success list
+            success_list = data.get('success_list', [])
+            if success_list:
+                details += f"{'='*60}\n"
+                details += f"✅ SUCCESS LIST ({len(success_list)})\n"
+                details += f"{'='*60}\n"
+                for idx, name in enumerate(success_list, 1):
+                    details += f"{idx}. {name}\n"
+                details += "\n"
+            
+            # Failed list
+            failed_list = data.get('failed_list', [])
+            if failed_list:
+                details += f"{'='*60}\n"
+                details += f"❌ FAILED LIST ({len(failed_list)})\n"
+                details += f"{'='*60}\n"
+                for idx, name in enumerate(failed_list, 1):
+                    details += f"{idx}. {name}\n"
+                details += "\n"
+            
+            # CAPTCHA list
+            captcha_list = data.get('captcha_list', [])
+            if captcha_list:
+                details += f"{'='*60}\n"
+                details += f"🤖 CAPTCHA BLOCKED ({len(captcha_list)})\n"
+                details += f"{'='*60}\n"
+                for idx, name in enumerate(captcha_list, 1):
+                    details += f"{idx}. {name}\n"
+                details += "\n"
+            
+            # Processed list
+            processed_list = data.get('dosen_processed', [])
+            if processed_list:
+                details += f"{'='*60}\n"
+                details += f"📝 ALL PROCESSED ({len(processed_list)})\n"
+                details += f"{'='*60}\n"
+                for idx, name in enumerate(processed_list, 1):
+                    details += f"{idx}. {name}\n"
+            
+            self.session_details_text.delete(1.0, tk.END)
+            self.session_details_text.insert(1.0, details)
+            
+        except Exception as e:
+            self.session_details_text.delete(1.0, tk.END)
+            self.session_details_text.insert(1.0, f"❌ Error reading summary:\n{str(e)}")
+    
+    def _open_logs_folder(self):
+        """
+        Open the logging folder in file explorer.
+        """
+        log_dir = "logging"
+        
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        # Open folder in explorer
+        import subprocess
+        if os.name == 'nt':  # Windows
+            os.startfile(log_dir)
+        elif os.name == 'posix':  # Mac/Linux
+            subprocess.call(['open', log_dir] if sys.platform == 'darwin' else ['xdg-open', log_dir])
     
     def _start_upload(self):
         """
@@ -902,6 +1265,9 @@ class GoogleScholarScraperGUI:
         # Clear log
         self.log_text.delete(1.0, tk.END)
         
+        # Switch to Real-time Log tab
+        self.notebook.select(1)  # Index 1 = Tab "📝 Log Aktivitas"
+        
         # Start scraping in separate thread
         thread = threading.Thread(target=self._run_scraping, daemon=True)
         thread.start()
@@ -969,6 +1335,7 @@ class GoogleScholarScraperGUI:
             self.log(f"\n[3/5] 🔍 Memulai scraping dari Google Scholar...")
             self.log(f"      Mode: {'Headless' if self.headless_mode.get() else 'Browser Visible'}")
             self.log(f"      Timeout: {self.wait_time.get()} detik")
+            self.log(f"      CAPTCHA Timeout: {self.captcha_wait_time.get()} menit")
             
             # Prepare year list if valid range is selected
             year_start = self.year_from.get()
@@ -982,7 +1349,8 @@ class GoogleScholarScraperGUI:
             
             scraper = GoogleScholarScraper(
                 headless=self.headless_mode.get(),
-                wait_time=self.wait_time.get()
+                wait_time=self.wait_time.get(),
+                captcha_wait_minutes=self.captcha_wait_time.get()
             )
             
             df_results = scraper.run_scraper(dosen_names_clean, years=years_list)

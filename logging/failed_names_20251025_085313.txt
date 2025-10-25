@@ -1,0 +1,13 @@
+FAILED SCRAPING - Session: 20251025_085313
+Generated: 2025-10-25 08:53:16
+Total Failed: 2
+============================================================
+
+1. Dr. Citra Dewi
+   Error Type: CAPTCHA
+   Error Message: CAPTCHA verification required
+
+2. Prof. Eka Wijaya
+   Error Type: PROFILE_NOT_FOUND
+   Error Message: Profile not found in search results
+

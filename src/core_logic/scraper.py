@@ -20,6 +20,7 @@ from selenium.common.exceptions import (
 from bs4 import BeautifulSoup
 import pandas as pd
 from .utils import parse_publication_info, parse_venue_from_detail
+from .logger import ScraperLogger
 
 
 class GoogleScholarScraper:
@@ -27,18 +28,21 @@ class GoogleScholarScraper:
     Kelas untuk melakukan scraping publikasi dari Google Scholar.
     """
     
-    def __init__(self, headless: bool = False, wait_time: int = 10):
+    def __init__(self, headless: bool = False, wait_time: int = 10, captcha_wait_minutes: int = 5):
         """
         Inisialisasi scraper dengan konfigurasi Selenium.
         
         Args:
             headless (bool): Jika True, browser akan berjalan tanpa GUI
             wait_time (int): Waktu maksimal tunggu dalam detik untuk WebDriverWait
+            captcha_wait_minutes (int): Waktu maksimal tunggu untuk manual CAPTCHA solving (menit)
         """
         self.wait_time = wait_time
         self.headless = headless
+        self.captcha_wait_minutes = captcha_wait_minutes
         self.driver = None
         self.results = []
+        self.logger = None  # Will be initialized in run_scraper
         
     def _init_driver(self):
         """
@@ -62,6 +66,94 @@ class GoogleScholarScraper:
         self.driver = webdriver.Chrome(options=options)
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
+    def _check_for_captcha(self) -> bool:
+        """
+        Memeriksa apakah halaman meminta CAPTCHA verification.
+        
+        Returns:
+            bool: True jika CAPTCHA terdeteksi, False jika tidak
+        """
+        try:
+            # Check untuk berbagai indikator CAPTCHA
+            page_source = self.driver.page_source.lower()
+            
+            # Indikator umum CAPTCHA
+            captcha_indicators = [
+                'recaptcha',
+                'captcha',
+                'unusual traffic',
+                'automated requests',
+                'robot',
+                'verify you are human',
+                'security check'
+            ]
+            
+            for indicator in captcha_indicators:
+                if indicator in page_source:
+                    return True
+            
+            # Check for reCAPTCHA iframe
+            try:
+                self.driver.find_element(By.CSS_SELECTOR, "iframe[src*='recaptcha']")
+                return True
+            except NoSuchElementException:
+                pass
+            
+            # Check untuk gs_captcha_ccl (Google Scholar specific)
+            try:
+                self.driver.find_element(By.ID, "gs_captcha_ccl")
+                return True
+            except NoSuchElementException:
+                pass
+                
+            return False
+            
+        except Exception as e:
+            print(f"Error saat mengecek CAPTCHA: {e}")
+            return False
+    
+    def _wait_for_captcha_solve(self, max_wait_minutes: Optional[int] = None) -> bool:
+        """
+        Tunggu user untuk menyelesaikan CAPTCHA secara manual.
+        
+        Args:
+            max_wait_minutes: Waktu maksimal tunggu dalam menit (default: dari self.captcha_wait_minutes)
+            
+        Returns:
+            bool: True jika CAPTCHA terselesaikan, False jika timeout
+        """
+        if max_wait_minutes is None:
+            max_wait_minutes = self.captcha_wait_minutes
+            
+        print(f"\n{'='*60}")
+        print(f"⚠️  CAPTCHA TERDETEKSI!")
+        print(f"{'='*60}")
+        print(f"Silakan selesaikan CAPTCHA secara manual di browser.")
+        print(f"Waktu tunggu maksimal: {max_wait_minutes} menit")
+        print(f"Script akan otomatis melanjutkan setelah CAPTCHA terselesaikan.")
+        print(f"{'='*60}\n")
+        
+        max_attempts = max_wait_minutes * 12  # Check setiap 5 detik
+        
+        for attempt in range(max_attempts):
+            # Check apakah CAPTCHA masih ada
+            if not self._check_for_captcha():
+                print(f"\n✅ CAPTCHA berhasil diselesaikan! Melanjutkan scraping...")
+                time.sleep(2)  # Beri waktu halaman untuk stabilize
+                return True
+            
+            # Display countdown
+            remaining_seconds = (max_attempts - attempt) * 5
+            remaining_minutes = remaining_seconds // 60
+            remaining_secs = remaining_seconds % 60
+            print(f"\r⏳ Menunggu CAPTCHA diselesaikan... ({remaining_minutes:02d}:{remaining_secs:02d}) ", end="", flush=True)
+            
+            time.sleep(5)  # Check setiap 5 detik
+        
+        print(f"\n\n❌ Timeout! CAPTCHA tidak diselesaikan dalam {max_wait_minutes} menit.")
+        print(f"   Melewati nama dosen ini dan melanjutkan ke berikutnya.\n")
+        return False
+    
     def _search_dosen(self, nama_dosen: str) -> bool:
         """
         Melakukan pencarian nama dosen di Google Scholar.
@@ -364,13 +456,39 @@ class GoogleScholarScraper:
             # Cari dosen
             if not self._search_dosen(nama_dosen):
                 print(f"Gagal mencari: {nama_dosen}")
+                if self.logger:
+                    self.logger.log_failure(nama_dosen, "Gagal melakukan pencarian", "SEARCH_FAILED")
                 return publications
+            
+            # Check for CAPTCHA after search
+            if self._check_for_captcha():
+                print(f"⚠️ CAPTCHA terdeteksi setelah pencarian: {nama_dosen}")
+                # Beri kesempatan user untuk solve CAPTCHA manual
+                if not self._wait_for_captcha_solve():
+                    # Jika timeout atau gagal solve, log dan skip
+                    if self.logger:
+                        self.logger.log_failure(nama_dosen, "CAPTCHA not solved within timeout", "CAPTCHA")
+                    return publications
+                # CAPTCHA berhasil diselesaikan, lanjutkan
             
             # Klik profil
             profile_url = self._find_and_click_profile()
             if not profile_url:
                 print(f"Profil tidak ditemukan untuk: {nama_dosen}")
+                if self.logger:
+                    self.logger.log_failure(nama_dosen, "Profil tidak ditemukan", "PROFILE_NOT_FOUND")
                 return publications
+            
+            # Check for CAPTCHA after clicking profile
+            if self._check_for_captcha():
+                print(f"⚠️ CAPTCHA terdeteksi setelah klik profil: {nama_dosen}")
+                # Beri kesempatan user untuk solve CAPTCHA manual
+                if not self._wait_for_captcha_solve():
+                    # Jika timeout atau gagal solve, log dan skip
+                    if self.logger:
+                        self.logger.log_failure(nama_dosen, "CAPTCHA not solved within timeout on profile page", "CAPTCHA")
+                    return publications
+                # CAPTCHA berhasil diselesaikan, lanjutkan
             
             print(f"Memproses profil: {nama_dosen}")
             
@@ -533,8 +651,19 @@ class GoogleScholarScraper:
             
             print(f"\n✅ Selesai: {nama_dosen} - {len(publications)} publikasi total")
             
+            # Log success
+            if self.logger:
+                self.logger.log_success(nama_dosen, len(publications), f"Profile: {profile_url}")
+            
         except Exception as e:
             print(f"❌ Error saat scraping {nama_dosen}: {e}")
+            if self.logger:
+                # Check if it's a CAPTCHA-related error
+                error_msg = str(e).lower()
+                if 'captcha' in error_msg or 'recaptcha' in error_msg or 'unusual traffic' in error_msg:
+                    self.logger.log_failure(nama_dosen, str(e), "CAPTCHA")
+                else:
+                    self.logger.log_failure(nama_dosen, str(e), "SCRAPING_ERROR")
         
         return publications
     
@@ -544,6 +673,7 @@ class GoogleScholarScraper:
         
         Args:
             dosen_list (List[str]): List nama dosen yang sudah dibersihkan
+            years (Optional[List[int]]): List tahun untuk cited_by tracking
             
         Returns:
             pd.DataFrame: DataFrame berisi semua publikasi
@@ -551,6 +681,10 @@ class GoogleScholarScraper:
         all_publications = []
         # store requested years (set) to filter output columns later
         self.years_to_collect = set(years) if years else None
+        
+        # Initialize logger
+        self.logger = ScraperLogger()
+        self.logger.start_session(dosen_list)
         
         try:
             # Inisialisasi driver
@@ -570,6 +704,19 @@ class GoogleScholarScraper:
             # Pastikan driver ditutup
             if self.driver:
                 self.driver.quit()
+            
+            # End logging session and save logs
+            if self.logger:
+                summary = self.logger.end_session()
+                print(f"\n{'='*60}")
+                print(f"SCRAPING SUMMARY")
+                print(f"{'='*60}")
+                print(f"Total: {summary['total']} dosen")
+                print(f"Success: {summary['success']} dosen")
+                print(f"Failed: {summary['failed']} dosen")
+                print(f"CAPTCHA: {summary['captcha']} dosen")
+                print(f"Success Rate: {(summary['success']/summary['total']*100):.1f}%" if summary['total'] > 0 else "N/A")
+                print(f"{'='*60}\n")
         
         # Konversi ke DataFrame
         df = pd.DataFrame(all_publications)

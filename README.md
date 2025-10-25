@@ -29,10 +29,13 @@ python main.py --gui
 
 ✅ **Dual Mode**: GUI & CLI  
 ✅ **Smart Scraping**: Auto-parse venue, citations, authors  
+✅ **Per-Year Citations**: Track cited-by data per year (customizable range)  
+✅ **CAPTCHA Handling**: Manual CAPTCHA solving with auto-wait  
+✅ **Comprehensive Logging**: Track success, failures, and CAPTCHA blocks  
 ✅ **Multi-Format Output**: Excel, CSV, DOCX  
 ✅ **Google Sheets Integration**: Direct upload via Apps Script  
 ✅ **Batch & Single**: Scraping multiple or individual dosen  
-✅ **Real-time Logging**: Monitor progress  
+✅ **Real-time Monitoring**: Progress tracking with detailed logs
 
 ## 📖 Usage
 
@@ -43,12 +46,14 @@ python main.py --gui
 ```
 
 **Tab Scraping:**
+
 - Batch: Upload CSV/TXT file with dosen names
 - Single: Input one dosen name manually
 - Config: Headless mode, timeout settings
 - Output: Auto-saved to `output/` folder
 
 **Tab Upload:**
+
 - Select Excel file
 - Enter Google Sheets URL
 - One-click upload
@@ -60,6 +65,7 @@ python main.py
 ```
 
 Edit `main.py` untuk konfigurasi:
+
 ```python
 INPUT_FILE_PATH = "input/daftar_dosen.csv"
 HEADLESS_MODE = False
@@ -126,25 +132,26 @@ OUTPUT_DIRECTORY=output
 
 ## 📊 Output Columns
 
-| Column | Description |
-|--------|-------------|
-| Nama Dosen | Dosen name |
-| Judul | Publication title |
-| Penulis | Authors list |
+| Column       | Description             |
+| ------------ | ----------------------- |
+| Nama Dosen   | Dosen name              |
+| Judul        | Publication title       |
+| Penulis      | Authors list            |
 | Journal_Name | Journal/conference name |
-| Volume | Volume number |
-| Issue | Issue number |
-| Pages | Page range |
-| Publisher | Publisher name |
-| Tahun | Year |
-| Sitasi | Citation count |
-| Link | Google Scholar URL |
+| Volume       | Volume number           |
+| Issue        | Issue number            |
+| Pages        | Page range              |
+| Publisher    | Publisher name          |
+| Tahun        | Year                    |
+| Sitasi       | Citation count          |
+| Link         | Google Scholar URL      |
 
 ## 🔧 Advanced
 
 ### Input File Format
 
 **CSV:**
+
 ```csv
 Nama
 Dr. John Doe, M.Kom
@@ -152,6 +159,7 @@ Prof. Jane Smith, Ph.D
 ```
 
 **TXT:**
+
 ```
 Dr. John Doe, M.Kom
 Prof. Jane Smith, Ph.D
@@ -167,6 +175,7 @@ output/
 ```
 
 Single scraping:
+
 ```
 publikasi_John_Doe_20241022_143000.xlsx
 ```
@@ -178,6 +187,7 @@ publikasi_John_Doe_20241022_143000.xlsx
 **Cause:** Apps Script permission not set to "Anyone"
 
 **Fix:**
+
 1. script.google.com → Your project
 2. Deploy → Manage deployments → Edit
 3. **Who has access** = **Anyone** (not "Anyone with Google account")
@@ -232,9 +242,42 @@ python-dotenv>=1.0.0      # Environment variables
 ## 🚧 Known Limitations
 
 - Google Scholar may rate-limit heavy scraping
+- CAPTCHA may appear during intensive scraping (handled with manual solving)
 - Requires exact dosen name (as appears on Google Scholar)
 - ChromeDriver must match Chrome version (auto-handled by selenium)
 - Network timeout on slow connections
+
+## 🔍 Advanced Features
+
+### CAPTCHA Handling
+
+When CAPTCHA is detected, the script will:
+
+1. Pause scraping and notify you
+2. Wait for manual CAPTCHA solving (default: 5 minutes)
+3. Auto-continue after CAPTCHA is solved
+4. Log CAPTCHA blocks for retry later
+
+See [CAPTCHA_GUIDE.md](CAPTCHA_GUIDE.md) for details.
+
+### Comprehensive Logging
+
+All scraping activities are logged in `logging/` folder:
+
+- **Summary JSON**: Session overview with statistics
+- **Detailed CSV**: Per-dosen results with timestamps
+- **Failed Names**: List of failed scrapes with error types
+- **CAPTCHA Blocks**: Separate list for CAPTCHA-blocked names
+
+See [LOGGING_GUIDE.md](LOGGING_GUIDE.md) for details.
+
+### Per-Year Citations
+
+Track citations per year with customizable range:
+
+- Set year range in GUI (From - To)
+- Get separate columns: `2020_cited_by`, `2021_cited_by`, etc.
+- Useful for tracking publication impact over time
 
 ## 📝 License
 

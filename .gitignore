@@ -52,6 +52,10 @@ Thumbs.db
 # Logs
 *.log
 
+# Logging directory - track structure but not session contents
+logging/session_*/
+!logging/.gitkeep
+
 # Environment variables
 .env
 .env.local

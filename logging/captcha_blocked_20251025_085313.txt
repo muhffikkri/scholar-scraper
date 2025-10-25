@@ -1,0 +1,12 @@
+CAPTCHA BLOCKED - Session: 20251025_085313
+Generated: 2025-10-25 08:53:16
+Total CAPTCHA Blocks: 1
+============================================================
+
+REKOMENDASI:
+1. Jalankan ulang scraping untuk nama-nama ini dengan delay lebih lama
+2. Gunakan mode non-headless untuk manual CAPTCHA solving
+3. Pertimbangkan menggunakan proxy atau VPN
+============================================================
+
+1. Dr. Citra Dewi
